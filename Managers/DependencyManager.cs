@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Reflection;
 using System.Threading.Tasks;
 using System.Net.Http.Headers;
@@ -60,7 +60,7 @@ namespace LinesOfCode.Web.Workers.Managers
         /// <summary>
         /// Configures a Blazor environment for web workers.
         /// </summary>
-        public static async Task UseWebWorkersAsync(this WebAssemblyHostBuilder builder, Action<IServiceCollection> addWebWorkerDependencies = null)
+        public static async Task UseWebWorkersAsync(this WebAssemblyHostBuilder builder, Action<IServiceCollection, ISettingsManager> addWebWorkerDependencies = null)
         {
             //initialization
             IJSInProcessRuntime jsRuntime = DependencyManager.GetJSRuntime();
@@ -101,7 +101,7 @@ namespace LinesOfCode.Web.Workers.Managers
 
             //return
             builder.RegisterServices(settingsManager);
-            addWebWorkerDependencies?.Invoke(builder.Services);
+            addWebWorkerDependencies?.Invoke(builder.Services, settingsManager);
         }
         #endregion
         #region Private Methods
