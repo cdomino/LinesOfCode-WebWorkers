@@ -11,8 +11,10 @@ using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.Components.Authorization;
 
 using LinesOfCode.Web.Workers.Models;
-using LinesOfCode.Web.Workers.Contracts;
 using LinesOfCode.Web.Workers.Utilities;
+using LinesOfCode.Web.Workers.Enumerations;
+using LinesOfCode.Web.Workers.Contracts.Services;
+using LinesOfCode.Web.Workers.Contracts.Managers;
 
 using MoreLinq;
 using Blazored.SessionStorage;
@@ -27,9 +29,9 @@ namespace LinesOfCode.Web.Workers.Managers
         #region Members
         private readonly IJSRuntime _jsRuntime;
         private readonly ILogger<WebWorkerManager> _logger;
-        private readonly ISettingsManager _settingsManager;
+        private readonly ISettingsService _settingsService;
         private readonly List<Guid> _webWorkerIds = new List<Guid>();
-        private readonly ISerializationManager _serializationManager;
+        private readonly ISerializationService _serializationManager;
         private readonly IMemoryCacheManager<string, Type> _typeCache;
         private readonly ISessionStorageService _sessionStorageService;
         private readonly IMemoryCacheManager<string, MethodInfo> _handlerCache;
@@ -51,9 +53,9 @@ namespace LinesOfCode.Web.Workers.Managers
         #endregion
         #region Initialization
         public WebWorkerManager(IJSRuntime jsRuntime,
-                                ISettingsManager settingsManager,
+                                ISettingsService settingsService,
                                 ILogger<WebWorkerManager> logger,
-                                ISerializationManager serializationManager,
+                                ISerializationService serializationManager,
                                 IMemoryCacheManager<string, Type> typeCache,
                                 ISessionStorageService sessionStorageService,                                
                                 IMemoryCacheManager<string, MethodInfo> handlerCache,
@@ -64,7 +66,7 @@ namespace LinesOfCode.Web.Workers.Managers
             this._jsRuntime = jsRuntime;
             this._typeCache = typeCache;
             this._handlerCache = handlerCache;
-            this._settingsManager = settingsManager;
+            this._settingsService = settingsService;
             this._serializationManager = serializationManager;
             this._sessionStorageService = sessionStorageService;
             this._authenticationStateProvider = authenticationStateProvider;
@@ -84,9 +86,9 @@ namespace LinesOfCode.Web.Workers.Managers
         }
 
         /// <summary>
-        /// Creates a new instance of a web worker. Returns true if the worker has already been created, false if it's in the initialization process, or null if creation was successful.
+        /// Creates a new instance of a web worker.
         /// </summary>
-        public async Task<bool?> CreateWorkerAsync(Guid? workerId = null, Func<Guid, Task> createdCallback = null)
+        public async Task<CreateWorkerCallbackStatus> CreateWorkerAsync(Guid? workerId = null, Func<Guid, Task> createdCallback = null)
         {
             //initialization
             Guid id = workerId.GetValueOrDefault(Guid.NewGuid());
@@ -97,28 +99,28 @@ namespace LinesOfCode.Web.Workers.Managers
             {
                 //worker already exists
                 this._logger.LogInformation($"Web worker {id} has already been created.");
-                return true;
+                return CreateWorkerCallbackStatus.AlreadyExists;
             }
             else if (this._creationCallbacks.ContainsKey(id))
             {
                 //worker is being created
                 this._logger.LogWarning($"Web worker {id} is still being initialized.");
-                return false;
+                return CreateWorkerCallbackStatus.AlreadyInitializing;
             }
 
             //create worker
             AzureB2CTokenModel token = await this.GetB2CTokenAsync();
-            await this._jsRuntime.InvokeVoidAsync(WebWorkerConstants.JavaScript.CreateWebWorker, id, this._jsReference, nameof(this.WorkerCreatedAsync), nameof(this.WebWorkerFinishedAsync), nameof(this.WebWorkerFailedAsync), nameof(this.WebWorkerEventRaisedAsync), this._settingsManager.GetAllSettings(), token);
+            await this._jsRuntime.InvokeVoidAsync(WebWorkerConstants.JavaScript.CreateWebWorker, id, this._jsReference, nameof(this.WorkerCreatedAsync), nameof(this.WebWorkerFinishedAsync), nameof(this.WebWorkerFailedAsync), nameof(this.WebWorkerEventRaisedAsync), this._settingsService.GetAllSettings(), token);
 
             //register callback
             this._creationCallbacks.Add(id, new List<Func<Guid, Task>>() { createdCallback });
 
             //return
-            return null;
+            return CreateWorkerCallbackStatus.Initializing;
         }
 
         /// <summary>
-        /// Sends an auth token to a web worker.
+        /// Sends an auth token to a web worker. Returns false if a token wasn't found.
         /// </summary>
         public async Task<bool> SendAuthenticationTokenToWebWorkerAsync(Guid workerId)
         {
@@ -139,7 +141,7 @@ namespace LinesOfCode.Web.Workers.Managers
         /// <summary>
         /// Allows a caller to register an additional callback for a web worker.
         /// </summary>
-        public async Task<bool?> RegisterWorkerCreationCallbackAsync(Guid workerId, Func<Guid, Task> createdCallback)
+        public async Task<AdditionalWorkerCallbackStatus> RegisterWorkerCreationCallbackAsync(Guid workerId, Func<Guid, Task> createdCallback)
         {
             //initialization
             if (this._creationCallbacks.ContainsKey(workerId))
@@ -147,20 +149,24 @@ namespace LinesOfCode.Web.Workers.Managers
                 //callback registered
                 this._logger.LogInformation($"Registered callback for web worker {workerId}.");
                 this._creationCallbacks[workerId].Add(createdCallback);
-                return false;
+
+                //return
+                return AdditionalWorkerCallbackStatus.Registered;
             }
             else if (this._webWorkerIds.Contains(workerId))
             {
                 //call method now
                 this._logger.LogInformation($"Since web worker {workerId} is already created, invoking callback now.");
                 await createdCallback(workerId);
-                return true;
+
+                //return
+                return AdditionalWorkerCallbackStatus.Executed; 
             }
             else
             {
                 //worker not found
                 this._logger.LogWarning($"Unable to register callback for web worker {workerId} as it was not found.");
-                return null;
+                return AdditionalWorkerCallbackStatus.NotFound;
             }
         }
 
@@ -826,11 +832,11 @@ namespace LinesOfCode.Web.Workers.Managers
             }
 
             //get b2c settings
-            Guid appId = this._settingsManager.GetSetting<Guid>(WebWorkerConstants.Security.Settings.AppId);
-            Guid tenantId = this._settingsManager.GetSetting<Guid>(WebWorkerConstants.Security.Settings.TenantId);
-            string policy = this._settingsManager.GetSetting<string>(WebWorkerConstants.Security.Settings.Policy);
-            string scope = this._settingsManager.GetSetting<string>(WebWorkerConstants.Security.Settings.AccessScope);
-            string instance = this._settingsManager.GetSetting<string>(WebWorkerConstants.Security.Settings.Instance);
+            Guid appId = this._settingsService.GetSetting<Guid>(WebWorkerConstants.Security.Settings.AppId);
+            Guid tenantId = this._settingsService.GetSetting<Guid>(WebWorkerConstants.Security.Settings.TenantId);
+            string policy = this._settingsService.GetSetting<string>(WebWorkerConstants.Security.Settings.Policy);
+            string scope = this._settingsService.GetSetting<string>(WebWorkerConstants.Security.Settings.AccessScope);
+            string instance = this._settingsService.GetSetting<string>(WebWorkerConstants.Security.Settings.Instance);
             Guid currentUserId = Guid.Parse(state.User.GetClaimValueWithFallback(WebWorkerConstants.Security.Claims.OID, WebWorkerConstants.Security.Claims.ID));
 
             //get token

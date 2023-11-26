@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Reflection;
 using System.Threading.Tasks;
 using System.Net.Http.Headers;
@@ -11,10 +11,12 @@ using Microsoft.Extensions.Configuration.Memory;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 
 using LinesOfCode.Web.Workers.Models;
-using LinesOfCode.Web.Workers.Contracts;
 using LinesOfCode.Web.Workers.Utilities;
 
 using Blazored.SessionStorage;
+using LinesOfCode.Web.Workers.Services;
+using LinesOfCode.Web.Workers.Contracts.Services;
+using LinesOfCode.Web.Workers.Contracts.Managers;
 
 namespace LinesOfCode.Web.Workers.Managers
 {
@@ -54,13 +56,13 @@ namespace LinesOfCode.Web.Workers.Managers
 
             //return
             builder.Services.AddScoped<IWebWorkerManager, WebWorkerManager>();
-            builder.RegisterServices(new SettingsManager(builder.Configuration.Build()));
+            builder.RegisterServices(new SettingsService(builder.Configuration.Build()));
         }
 
         /// <summary>
         /// Configures a Blazor environment for web workers.
         /// </summary>
-        public static async Task UseWebWorkersAsync(this WebAssemblyHostBuilder builder, Action<IServiceCollection, ISettingsManager> addWebWorkerDependencies = null)
+        public static async Task UseWebWorkersAsync(this WebAssemblyHostBuilder builder, Action<IServiceCollection, ISettingsService> addWebWorkerDependencies = null)
         {
             //initialization
             IJSInProcessRuntime jsRuntime = DependencyManager.GetJSRuntime();
@@ -77,7 +79,7 @@ namespace LinesOfCode.Web.Workers.Managers
             builder.Services.AddOptions();
             builder.Configuration.AddEnvironmentVariables();
             builder.Configuration.Add(new MemoryConfigurationSource { InitialData = settings });
-            SettingsManager settingsManager = new SettingsManager(builder.Configuration.Build(), token, true);
+            SettingsService settingsService = new SettingsService(builder.Configuration.Build(), token, true);
 
             //add authenticated http client
             builder.Services.AddHttpClient(WebWorkerConstants.Hosting.APIAuthorized, (container, client) =>
@@ -86,8 +88,8 @@ namespace LinesOfCode.Web.Workers.Managers
                 if (token == null)
                 {
                     //get token
-                    ISettingsManager httpClientSettingsManager = container.GetRequiredService<ISettingsManager>();
-                    token = httpClientSettingsManager.Token;
+                    ISettingsService httpClientSettingsService = container.GetRequiredService<ISettingsService>();
+                    token = httpClientSettingsService.Token;
                 }
 
                 //check token
@@ -100,20 +102,20 @@ namespace LinesOfCode.Web.Workers.Managers
             });
 
             //return
-            builder.RegisterServices(settingsManager);
-            addWebWorkerDependencies?.Invoke(builder.Services, settingsManager);
+            builder.RegisterServices(settingsService);
+            addWebWorkerDependencies?.Invoke(builder.Services, settingsService);
         }
         #endregion
         #region Private Methods
         /// <summary>
         /// Registers web worker services and resources.
         /// </summary>
-        private static void RegisterServices(this WebAssemblyHostBuilder builder, ISettingsManager settingsManager = null)
+        private static void RegisterServices(this WebAssemblyHostBuilder builder, ISettingsService settingsService = null)
         {
             //initialization
-            builder.Services.AddSingleton<ISerializationManager, SerializationManager>();
+            builder.Services.AddSingleton<ISerializationService, SerializationService>();
             builder.Services.AddSingleton(typeof(IMemoryCacheManager<,>), typeof(MemoryCacheManager<,>));
-            builder.Services.AddSingleton<ISettingsManager>(settingsManager ?? new SettingsManager(builder.Configuration));
+            builder.Services.AddSingleton<ISettingsService>(settingsService ?? new SettingsService(builder.Configuration));
 
             //return
             builder.Services.AddBlazoredSessionStorage(options => options.JsonSerializerOptions.ApplyJSONConfiguration(true));

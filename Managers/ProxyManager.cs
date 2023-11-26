@@ -12,7 +12,8 @@ using Microsoft.Extensions.DependencyInjection;
 
 using LinesOfCode.Web.Workers.Models;
 using LinesOfCode.Web.Workers.Utilities;
-using LinesOfCode.Web.Workers.Contracts;
+using LinesOfCode.Web.Workers.Contracts.Services;
+using LinesOfCode.Web.Workers.Contracts.Managers;
 
 namespace LinesOfCode.Web.Workers.Managers
 {
@@ -36,7 +37,7 @@ namespace LinesOfCode.Web.Workers.Managers
         private ILogger<ProxyManager> _logger { get; set; }
 
         [Inject()]
-        private ISerializationManager _serializationManager { get; set; }
+        private ISerializationService _serializationManager { get; set; }
 
         [Inject()]
         private IMemoryCacheManager<Type, MethodInfo> _marshallerCache { get; set; }
@@ -249,8 +250,8 @@ namespace LinesOfCode.Web.Workers.Managers
                 throw new ArgumentNullException("The authentication token is required.");
 
             //return
-            ISettingsManager settingsManager = this._container.GetRequiredService<ISettingsManager>();
-            settingsManager.Token = token;
+            ISettingsService settingsService = this._container.GetRequiredService<ISettingsService>();
+            settingsService.Token = token;
         }
         #endregion
         #region Private Methods
