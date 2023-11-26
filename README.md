@@ -111,7 +111,7 @@ The following steps walk you through how to get Blazor Web Workers installed and
 
     ```
     //worker thread
-    await builder.UseWebWorkersAsync((services, settingsManager) =>
+    await builder.UseWebWorkersAsync((services, settingsService) =>
     {
         //register a mock service for testing
         services.AddTransient<IMockLongRunningService, MockLongRunningService>();
@@ -120,75 +120,75 @@ The following steps walk you through how to get Blazor Web Workers installed and
 
 Okay! Here's what my final Program.cs looks like, with all my obsessive use of regions, comments, and other code hygene that annoys my PR approvers.
 
-    ```
-    using System.Threading.Tasks;
+```
+using System.Threading.Tasks;
 
-    using Microsoft.Extensions.DependencyInjection;
-    using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 
-    using LinesOfCode.Common;
-    using LinesOfCode.Web.Workers.Mock;
-    using LinesOfCode.Web.Client.Managers;
-    using LinesOfCode.Web.Workers.Managers;
-    using LinesOfCode.Web.Workers.Utilities;
-    using LinesOfCode.Domain.Common.Contracts.Managers;
+using LinesOfCode.Common;
+using LinesOfCode.Web.Workers.Mock;
+using LinesOfCode.Web.Client.Managers;
+using LinesOfCode.Web.Workers.Managers;
+using LinesOfCode.Web.Workers.Utilities;
+using LinesOfCode.Domain.Common.Contracts.Managers;
 
-    namespace LinesOfCode.Web.Client
+namespace LinesOfCode.Web.Client
+{
+    /// <summary>
+    /// This is the client WASM app.
+    /// </summary>
+    public class Program
     {
+        #region Initialization
         /// <summary>
-        /// This is the client WASM app.
+        /// This is the entry point to the app.
         /// </summary>
-        public class Program
+        public static async Task Main(string[] args)
         {
-            #region Initialization
-            /// <summary>
-            /// This is the entry point to the app.
-            /// </summary>
-            public static async Task Main(string[] args)
+            //initialization
+            WebAssemblyHostBuilder builder = WebAssemblyHostBuilder.CreateDefault(args);
+
+            //determine if this is a web worker
+            if (builder.HostEnvironment.IsEnvironment(WebWorkerConstants.Hosting.WebWorker))
             {
-                //initialization
-                WebAssemblyHostBuilder builder = WebAssemblyHostBuilder.CreateDefault(args);
-
-                //determine if this is a web worker
-                if (builder.HostEnvironment.IsEnvironment(WebWorkerConstants.Hosting.WebWorker))
+                //register web workers
+                await builder.UseWebWorkersAsync((services, settingsService) =>
                 {
-                    //register web workers
-                    await builder.UseWebWorkersAsync(services =>
-                    {
-                        //register a mock service for testing
-                        services.AddTransient<IMockLongRunningService, MockLongRunningService>();
-                    });
-                }
-                else
-                {
-                    //build app
-                    await ClientDependencyManager.ConfigureBlazorWASMAppAsync(builder);
-                    ISettingsManager settingsManager = builder.Services.BuildServiceProvider(true).GetRequiredService<ISettingsManager>();
-
-                    //add web worker services
-                    builder.AddWebWorkers(options =>
-                    {
-                        //configure web workers
-                        options.AzureB2CSettings.AppId = settingsManager.GetSetting<string>(LOCConstants.Settings.Security.AzureB2C.AppId);
-                        options.AzureB2CSettings.Policy = settingsManager.GetSetting<string>(LOCConstants.Settings.Security.AzureB2C.Policy);
-                        options.AzureB2CSettings.TenantId = settingsManager.GetSetting<string>(LOCConstants.Settings.Security.AzureB2C.TenantId);
-                        options.AzureB2CSettings.Instance = settingsManager.GetSetting<string>(LOCConstants.Settings.Security.AzureB2C.Instance);
-                        options.AzureB2CSettings.AccessScope = settingsManager.GetSetting<string>(LOCConstants.Settings.Security.AzureB2C.AccessScope);
-                    });
-
                     //register a mock service for testing
-                    builder.Services.AddTransient<IMockLongRunningService, MockLongRunningService>();
-                }
-
-                //other cool config stuff here
-
-                //return
-                await builder.Build().RunAsync();
+                    services.AddTransient<IMockLongRunningService, MockLongRunningService>();
+                });
             }
-            #endregion
+            else
+            {
+                //build app
+                await ClientDependencyManager.ConfigureBlazorWASMAppAsync(builder);
+                ISettingsService settingsService = builder.Services.BuildServiceProvider(true).GetRequiredService<ISettingsService>();
+
+                //add web worker services
+                builder.AddWebWorkers(options =>
+                {
+                    //configure web workers
+                    options.AzureB2CSettings.AppId = settingsService.GetSetting<string>(LOCConstants.Settings.Security.AzureB2C.AppId);
+                    options.AzureB2CSettings.Policy = settingsService.GetSetting<string>(LOCConstants.Settings.Security.AzureB2C.Policy);
+                    options.AzureB2CSettings.TenantId = settingsService.GetSetting<string>(LOCConstants.Settings.Security.AzureB2C.TenantId);
+                    options.AzureB2CSettings.Instance = settingsService.GetSetting<string>(LOCConstants.Settings.Security.AzureB2C.Instance);
+                    options.AzureB2CSettings.AccessScope = settingsService.GetSetting<string>(LOCConstants.Settings.Security.AzureB2C.AccessScope);
+                });
+
+                //register a mock service for testing
+                builder.Services.AddTransient<IMockLongRunningService, MockLongRunningService>();
+            }
+
+            //other cool config stuff here
+
+            //return
+            await builder.Build().RunAsync();
         }
+        #endregion
     }
-    ```
+}
+```
 
 ## Usage
 
@@ -206,97 +206,97 @@ Also, despite being 100% Italian, I **hate** spaghetti code; you'll therefore fi
 
 `</HotTake>`
 
-    ```
-    @inherits WebWorkersBase
+```
+@inherits WebWorkersBase
 
-    <Button Text="Create Web Worker" Click=@this.CreateWorkerAsync />
+<Button Text="Create Web Worker" Click=@this.CreateWorkerAsync />
 
-    <div class=@LOCConstants.UI.CSS.Form.VerticalSpacerTop>
-        <SpinForm Model=@this._selectedWorker>
-            <div class="row">
-                <div class="col-lg-4">
-                    <Dropdown B=@LinesOfCode.Web.Workers.Mock.MockWorker @bind-Value=this._selectedWorker Data=@this._workers />
-                </div>
-                <div class="col-lg-2">
-                    <Textbox B=@int @bind-Value=this._simulationSeconds Min=1 Max=10 />
-                </div>
-                <div class="col-lg-2">
-                    <Checkbox @bind-Value=this._registerEvents />
-                </div>
+<div class=@LOCConstants.UI.CSS.Form.VerticalSpacerTop>
+    <SpinForm Model=@this._selectedWorker>
+        <div class="row">
+            <div class="col-lg-4">
+                <Dropdown B=@LinesOfCode.Web.Workers.Mock.MockWorker @bind-Value=this._selectedWorker Data=@this._workers />
             </div>
-        </SpinForm>   
-    </div>
+            <div class="col-lg-2">
+                <Textbox B=@int @bind-Value=this._simulationSeconds Min=1 Max=10 />
+            </div>
+            <div class="col-lg-2">
+                <Checkbox @bind-Value=this._registerEvents />
+            </div>
+        </div>
+    </SpinForm>   
+</div>
 
-    <div class=@LOCConstants.UI.CSS.Form.VerticalSpacerTop>
-        <Button Text="Run Web Worker" Click=@this.RunWorkerAsync />
-    </div>
-    ```
+<div class=@LOCConstants.UI.CSS.Form.VerticalSpacerTop>
+    <Button Text="Run Web Worker" Click=@this.RunWorkerAsync />
+</div>
+```
 
 Again, I can't go into all the details for the test harness and its usage of my many Blazor helpers, but here are the main dependencies first; I'll then use the button click handlers as a nice way to segment the remaining  logic. `IWebWorkerManager` is your main interface to creating and managing web worker threads. I also include a "real" (concrete) test service here so you can run it directly on the main thread for comparison.
 
-    ```
-      #region Dependencies
-      [Inject()]
-      private IWebWorkerManager _webWorkerManager { get; set; }
+```
+#region Dependencies
+[Inject()]
+private IWebWorkerManager _webWorkerManager { get; set; }
 
-      [Inject()]
-      private IMockLongRunningService _mockService { get; set; }
-      #endregion
-    ```
+[Inject()]
+private IMockLongRunningService _mockService { get; set; }
+#endregion
+```
 
 Next, the `CreateWorkerAsync` button click handler, well, creates a web worker that's identified by a `Guid`. JavaScript threads could take a beat to load (especially on older machines; this is browser code, not server code); if you elect to spin up a bunch of threads at once when your app first loads, you can `await` all the `Task`s and send a callback to an overload of `CreateWorkerAsync` so that you know exactly when your threads are primed. I've even done this in my layout code and used memory state objects to politely enable and disable buttons across my app so they are only clickable when certain threads are created.
 
-    ```
-    /// <summary>
-    /// Creates a new web worker.
-    /// </summary>
-    protected async Task CreateWorkerAsync()
-    {
-        //initialization
-        Guid id = Guid.NewGuid();
+```
+/// <summary>
+/// Creates a new web worker.
+/// </summary>
+protected async Task CreateWorkerAsync()
+{
+    //initialization
+    Guid id = Guid.NewGuid();
 
-	    //create worker (which returns true if the worker has already been created, false if it's in the initialization process, or null if creation was successful and is now in progress...apparently I'm unfamiliar with enums...)
-	    bool? result = await this._webWorkerManager.CreateWorkerAsync(id);
-        if (result.GetValueOrDefault(true))
-        {
-            //worker was successfully started or created
-		    this._selectedWorker = new MockWorker(id);
-		    this._workers.Add(this._selectedWorker);
-		    await this.StateHasChangedAsync();
+	//create worker (which returns true if the worker has already been created, false if it's in the initialization process, or null if creation was successful and is now in progress...apparently I'm unfamiliar with enums...)
+	bool? result = await this._webWorkerManager.CreateWorkerAsync(id);
+    if (result.GetValueOrDefault(true))
+    {
+        //worker was successfully started or created
+		this._selectedWorker = new MockWorker(id);
+		this._workers.Add(this._selectedWorker);
+		await this.StateHasChangedAsync();
 		 
-            //remember that it might not be available this moment; use the callback overload if you need to execute logic as soon as it's spooled up
-        }
-        else
-        {
-            //return
-            await base.ShowToastAsync($"Unable to create worker {id}.", LogLevel.Error);
-        }
+        //remember that it might not be available this moment; use the callback overload if you need to execute logic as soon as it's spooled up
     }
-    ```
+    else
+    {
+        //return
+        await base.ShowToastAsync($"Unable to create worker {id}.", LogLevel.Error);
+    }
+}
+```
 
 Now let's run some code (the `RunAsync` method on `MockService` is my example function) on our new thread upon the other button click.
 
-    ```
-      /// <summary>
-      /// Executes a new web worker.
-      /// </summary>
-      protected async Task RunWorkerAsync()
-      {
-          //initialization
-          this._simulationSeconds = Math.Min(Math.Max(this._simulationSeconds, 1), 10);
+```
+/// <summary>
+/// Executes a new web worker.
+/// </summary>
+protected async Task RunWorkerAsync()
+{
+    //initialization
+    this._simulationSeconds = Math.Min(Math.Max(this._simulationSeconds, 1), 10);
 
-          //create a proxy
-          IMockLongRunningService proxiedMockService = this._webWorkerManager.GetProxyImplementation<IMockLongRunningService>(this._selectedWorker.Id);
-          Guid invocationId = this._webWorkerManager.RegisterMethodInvocationCallbacks<IMockLongRunningService, string>(proxiedMockService, nameof(this._mockService.RunAsync), this.WorkerCompletedAsync, this.WorkerFailedAsync);
+    //create a proxy
+    IMockLongRunningService proxiedMockService = this._webWorkerManager.GetProxyImplementation<IMockLongRunningService>(this._selectedWorker.Id);
+    Guid invocationId = this._webWorkerManager.RegisterMethodInvocationCallbacks<IMockLongRunningService, string>(proxiedMockService, nameof(this._mockService.RunAsync), this.WorkerCompletedAsync, this.WorkerFailedAsync);
 
-          //handle events
-          if (this._registerEvents)
-              this._webWorkerManager.RegisterEventCallback<IMockLongRunningService, MockEventData>(proxiedMockService, invocationId, nameof(this._mockService.MockEvent), this.WorkerProgressedAsync);
+    //handle events
+    if (this._registerEvents)
+        this._webWorkerManager.RegisterEventCallback<IMockLongRunningService, MockEventData>(proxiedMockService, invocationId, nameof(this._mockService.MockEvent), this.WorkerProgressedAsync);
           
-          //return
-          await proxiedMockService.RunAsync(this._simulationSeconds);   
-      }
-    ```
+    //return
+    await proxiedMockService.RunAsync(this._simulationSeconds);   
+}
+```
 
 Under the `else` are the major beats to hit for Blazor Web Workers:
 
@@ -309,57 +309,57 @@ Under the `else` are the major beats to hit for Blazor Web Workers:
  3. And here are the callbacks (remember, the method result can be of any type!):
  
     ```
-       /// <summary>
-       /// This handles successful method proxy invocations.
-       /// </summary>
-       protected async Task WorkerCompletedAsync(string result, Guid invocationId)
-       {
-           //return
-           if (string.IsNullOrWhiteSpace(result))
-               await this.WorkerFailedAsync(new ErrorMessageModel(invocationId, null, "The worker completed successfully, but no result was provided."));
-           else
-               await base.ShowToastAsync($"Successfully completed proxy method invocation {invocationId}: {result}");
-       }
+    /// <summary>
+    /// This handles successful method proxy invocations.
+    /// </summary>
+    protected async Task WorkerCompletedAsync(string result, Guid invocationId)
+    {
+        //return
+        if (string.IsNullOrWhiteSpace(result))
+            await this.WorkerFailedAsync(new ErrorMessageModel(invocationId, null, "The worker completed successfully, but no result was provided."));
+        else
+            await base.ShowToastAsync($"Successfully completed proxy method invocation {invocationId}: {result}");
+    }
 
-       /// <summary>
-       /// This handles failed method proxy invocations.
-       /// </summary>
-       protected async Task WorkerFailedAsync(ErrorMessageModel result)
-       {
-	       //initialization
-           this._logger.LogError($"Unable to call {result.Proxy.MethodName} with {result.Proxy.ParameterTypeNames} and {result.Proxy.ParameterValues}.");
+    /// <summary>
+    /// This handles failed method proxy invocations.
+    /// </summary>
+    protected async Task WorkerFailedAsync(ErrorMessageModel result)
+    {
+	    //initialization
+        this._logger.LogError($"Unable to call {result.Proxy.MethodName} with {result.Proxy.ParameterTypeNames} and {result.Proxy.ParameterValues}.");
 
-           //return
-           if (!string.IsNullOrWhiteSpace(result?.Error))
-               await base.ShowToastAsync($"Unable to complete proxy method invocation {result.InvocationId}: {result.Error}", LogLevel.Error);
-           else
-               await base.ShowToastAsync($"Unable to complete proxy method invocation {result?.InvocationId.ToString() ?? "N/A"}: An unknown error has occured.", LogLevel.Error);
-       }
+        //return
+        if (!string.IsNullOrWhiteSpace(result?.Error))
+            await base.ShowToastAsync($"Unable to complete proxy method invocation {result.InvocationId}: {result.Error}", LogLevel.Error);
+        else
+            await base.ShowToastAsync($"Unable to complete proxy method invocation {result?.InvocationId.ToString() ?? "N/A"}: An unknown error has occured.", LogLevel.Error);
+    }
     ```
  
  4. Next, let's look at how progress events are handled. It's really the same idea: pass the proxy object, the return type and name of event, the method invocation id (which is a pattern that allows you to organize which events are handled on which methods) and an appropriate handler to `this._webWorkerManager.RegisterEventCallback`.
 
     ```
-      //handle events
-      if (this._registerEvents)
-          this._webWorkerManager.RegisterEventCallback<IMockLongRunningService, MockEventData>(proxiedMockService, invocationId, nameof(this._mockService.MockEvent), this.WorkerProgressedAsync);
+    //handle events
+    if (this._registerEvents)
+        this._webWorkerManager.RegisterEventCallback<IMockLongRunningService, MockEventData>(proxiedMockService, invocationId, nameof(this._mockService.MockEvent), this.WorkerProgressedAsync);
   
-      ...
+    ...
       
-      /// <summary>
-      /// This handles a method proxy event.
-      /// </summary>
-      protected async Task WorkerProgressedAsync(MockEventData eventData, Guid invocationId)
-      {
-          //return
-          if (eventData == null)
-              await this.WorkerFailedAsync(new ErrorMessageModel(invocationId, null, "The worker event was handled successfully, but no data was provided."));
-          else
-              await base.ShowToastAsync($"Successfully handled proxy event {invocationId}: {eventData.ElapsedTime}");
-      }            
+    /// <summary>
+    /// This handles a method proxy event.
+    /// </summary>
+    protected async Task WorkerProgressedAsync(MockEventData eventData, Guid invocationId)
+    {
+        //return
+        if (eventData == null)
+            await this.WorkerFailedAsync(new ErrorMessageModel(invocationId, null, "The worker event was handled successfully, but no data was provided."));
+        else
+            await base.ShowToastAsync($"Successfully handled proxy event {invocationId}: {eventData.ElapsedTime}");
+    }            
     ```
  
- 5. All that's left to do is execute your method! ` await proxiedMockService.RunAsync(this._simulationSeconds);` Notice that it's just like calling a normal function on a normal object; no orchestrators or wrappers are needed. As I've said, the only paradigmatic difference is that result doesn't come inline; it's sent to an event handler instead to really drive home how much your long running operation isn't blocking the UI!
+ 5. All that's left to do is execute your method! `await proxiedMockService.RunAsync(this._simulationSeconds);` Notice that it's just like calling a normal function on a normal object; no orchestrators or wrappers are needed. As I've said, the only paradigmatic difference is that result doesn't come inline; it's sent to an event handler instead to really drive home how much your long running operation isn't blocking the UI!
 
 ## Final Thoughts
 
@@ -369,7 +369,7 @@ Here are some tips and tricks as you start thinking about multithreaded JavaScri
  - If you need authenticated Web Workers but your app has some anonymous pages/components that before any login prompts, there is a way to "post-auth" Web Workers that have already been spun up using `IWebWorkerManager.SendAuthenticationTokenToWebWorkerAsync`.
  - Remember that Web Workers don't have access to the UI DOM or local storage, but they (somehow) *can* access the browser's IndexedDB if you really *really* need to share state.
  - As I mentioned previously, there is a bit of native overhead to spooling up Web Worker threads; I've found that some of the lessons we had to learn when `async` came into our lives apply here too: it's sometimes faster to simply show a spinner and block the UI than to do this whole dance for an otherwise simple operation.
- - Frankly, I haven't used this enough yet to establish firm best practices. However, one pattern that has been working well for me is to spin up about half a dozen threads when my app first loads  (which is done asynchronously; the last thing I want to do is further punish users waiting for Blazor WASM apps to load) and then really using the hell out of them, calling method after method and handling event after event versus spinning up a lot of one-use threads. While this *feels* "right" to me, it's anecdotal as this point until we have more data.
+ - Frankly, I haven't used this widely enough yet to establish firm best practices. However, one pattern that has been working well for me is to spin up about half a dozen threads when my app first loads  (which is done asynchronously; the last thing I want to do is further punish users waiting for Blazor WASM apps to load) and then really using the hell out of them, calling method after method and handling event after event versus spinning up a lot of one-use threads. While this *feels* "right" to me, it's anecdotal as this point until we have more data.
  - A really cool use case is processing image uploads in Blazor Web Workers. As long as you never actually touch the bytes in your .NET code and do it all with the crazy native JavaScript memory array APIs (and a little help from Azure Storage's [progressive upload API](https://learn.microsoft.com/en-us/dotnet/api/azure.storage.blobs.specialized.blockblobclient.stageblockasync?view=azure-dotnet)) you can upload large images really quickly WITH real progress bars.
  - I've only tested this on Windows 11 with Chrome, Edge, and FireFox; please let me know if you encounter any environmental issues. I've also only ever used the authentication bits against a single Azure B2C tenant; I'm interested to see what other needs there are. (DIfferent B2C configurations? Okta? AAD?)
  - I assume everyone is being a good little .NET Core developer and using ILogger, IConfiguration, etc. in their architectures. While I don't take a *hard* dependency on those technologies, I haven't tried this without them; just drop me an issue if any of this infrastructure adds unwanted bloat to your app (or simply breaks it). 
