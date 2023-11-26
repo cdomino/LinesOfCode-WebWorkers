@@ -1,12 +1,14 @@
 # Blazor Web Workers
 
-This provides a quick(ish) overview of how to use this package to achieve  *actual* multithreading in your Blazor web apps. Despite the yummy .NET `async`/`await`  goodness we've been enjoying in the browser for years now, JavaScript still only runs on the browser's main UI thread in general.
+Welcome! Despite the yummy .NET `async`/`await` goodness we've been enjoying in Blazor for years now, JavaScript essentially still only runs on the browser's main UI thread. Web Workers are the shortest path on the way to achieving native parallelism in your client apps as they allow you to spin up and run code on background threads in the browser.
+
+Microsoft kind of flirted with this [as an experiment](https://visualstudiomagazine.com/articles/2022/10/11/blazor-webassembly-net7.aspx) while .NET 8 was still gestating, but it sadly didn't make the cut this round; Web Workers are therefore still not part of Blazor proper, which was the inspiration to publish this package. I have been evolving this code since I first got serious with Blazor WASM back in 2020, and now that I've ported everything to .NET 8 (and confirmed that the new Blazor Web App paradigm didn't completely send me back to the coding board) it's ready to share!
+
+This doc provides a detailed overview of how to use this package to achieve *actual* multithreading in your Blazor web apps. 
 
 ## Background 
 
-Web Workers are the shortest path on the way to achieving parallelism in your browser .NET apps. Microsoft kind of flirted with this [as an experiment](https://visualstudiomagazine.com/articles/2022/10/11/blazor-webassembly-net7.aspx) while .NET 8 was still gestating, but it sadly didn't make the cut this round; Web Workers are therefore still not part of Blazor proper, which was the inspiration to publish this package. I have been evolving this code since I first got serious with Blazor WASM back in 2020, and now that I've ported everything to .NET 8 (and confirmed that the new Blazor Web App paradigm didn't completely send me back to the coding board) it's ready to share!
-
-There are a few decent flavors of this kind of thing out there, but I decided to cook my own after not being able to accept the restrictions inherent to the initial offerings of other intrepid developers in this space. These challenges include requiring copying method parameters to local variables before they could be passed to worker, not being able to customize the copious serialization going on behind the scenes, not being able to share large/complex objects among the threads, and ultimately having an implementation that just didn't feel like a natural code flow.
+There are a few decent flavors of this kind of thing out there, but I decided to cook my own after not being able to accept the restrictions inherent to the initial offerings of other intrepid developers in this space. These challenges include requiring copying method parameters to local variables before they could be passed to a worker, not being able to customize the copious serialization going on behind the scenes, not being able to share large/complex objects among the threads, and ultimately having an implementation that just didn't feel like a natural code flow.
 
 I wanted my workers to be more of an implementation detail than a paradigm developers had to adopt. It was important to ~~my OCD~~ me to be able to take any service call and simply run it as a worker rather than having to contort my logic into a awkward posture that was agreeable to the multithreading frameworks out there I was attempting to leverage. There is still of course overhead and churn to anything this complicated, but I think I found the path of least fuckery to get up and running quickly.
 
@@ -16,16 +18,16 @@ Here are some other developer quality of life features I am excited to offer:
  - VS tools like IntelliSense/Find Reference work as through the code was running on the main thread. Using "real" references in the library (verses `eval` or other approaches that could confuse a tree shaker) is specifically important for Blazor deployment code trimming; you probably don't want to wait 45 minutes for each build to finish before being able to see if your app was mutilated in the process because the trimmer didn't think your service's methods were  in use.
  - Since we can't debug into Blazor Web Worker  processes, I include lot of logging to help peek into the black (or at least WASM-colored) box.
  - I tried to keep the .NET Core-ish configuration bits as simple as possible; what you do in Program.cs is your business, not mine.
- - I need to be able to not only call APIs from workers, but also pass authentication tokens so remote resources  can be fetched securely as well.
+ - You can not only call APIs from workers, but also pass authentication tokens so remote resources  can be fetched securely as well.
  - Finally, only performing long running operations that do not block the UI isn't good enough; I provide  the ability to report progress via standard .NET events!
 
 ## Installation
 
 The following steps walk you through how to get Blazor Web Workers installed and configured in your app.
 
- 1. Install the Nuget package to your Blazor project (if you're using the .NET Core hosting model, you want the client app). I currently only support .NET 8 since my Thanksgiving break is only a week long, but if there's interest and you don't tell my wife, I would be happy to spend more time testing this against older frameworks.
+ 1. Install the [Nuget package](https://www.nuget.org/packages/LinesOfCode.Web.Workers) to your Blazor project. I currently just support .NET 8 since my Thanksgiving break was only a week long, but if there's interest and you don't tell my wife, I would be happy to spend more time testing this against older frameworks.
  
- 2. Throw this at the bottom of your `<body>...</body>` in App.razor (if you're using the new .NET 8 Blazor Web App templates; otherwise you want index.html for WASM or _Host.cshtml for Server):
+ 2. Add the following line of code to the bottom-ish of your `<body>...</body>` in App.razor (if you're using the new .NET 8 Blazor Web App templates; otherwise you want index.html for WASM or _Host.cshtml for Server):
  
     `<script src="_content/LinesOfCode.Web.Workers/web-worker-manager.js"></script>`
 
@@ -96,8 +98,8 @@ The following steps walk you through how to get Blazor Web Workers installed and
 7. (Optional) If you'd like to kick the tires easily, I have included a mock service you can register. Anything in my repo that has "Mock" in the name is sample code (services, interfaces, and models) for testing; it in no way refers to the web workers or their infrastructure.
 
     ```
-     //register a mock service for testing
-     builder.Services.AddTransient<IMockLongRunningService, MockLongRunningService>();
+    //register a mock service for testing
+    builder.Services.AddTransient<IMockLongRunningService, MockLongRunningService>();
     ```
 
 8. Now for the affirming side of the `if` statement, this is how I literally shove Blazor into the web worker: 
@@ -107,7 +109,7 @@ The following steps walk you through how to get Blazor Web Workers installed and
     await builder.UseWebWorkersAsync();
     ```
 
-9. (Also optional, kind of) If you opted into Step 7 above, you'll also have to make the web worker aware of our test harness using an overload.
+9. In order for a Blazor Web Worker to be aware of your dependency injection infrastructure so it can construct your services, you can use an overload of this method to configure your container. To keep this clean, I typically use extension methods to wrap common .NET core DI logic.
 
     ```
     //worker thread
@@ -244,7 +246,7 @@ private IMockLongRunningService _mockService { get; set; }
 #endregion
 ```
 
-Next, the `CreateWorkerAsync` button click handler, well, creates a web worker that's identified by a `Guid`. JavaScript threads could take a beat to load (especially on older machines; this is browser code, not server code); if you elect to spin up a bunch of threads at once when your app first loads, you can `await` all the `Task`s and send a callback to an overload of `CreateWorkerAsync` so that you know exactly when your threads are primed. I've even done this in my layout code and used memory state objects to politely enable and disable buttons across my app so they are only clickable when certain threads are created.
+Next, the `CreateWorkerAsync` button click handler, well, creates a web worker that's identified by a `Guid`. JavaScript threads could take a beat to load (especially on older machines; this is browser code, not server code); if you elect to spin up a bunch of threads at once when your app first loads, you can `await` all the resulting `Task` objects and send a callback to an overload of `CreateWorkerAsync`. This callback will let you know exactly when your threads are primed. I've even done this in my layout code and used memory state objects to politely enable and disable buttons across my app so they are only clickable when certain threads are created.
 
 ```
 /// <summary>
@@ -255,15 +257,15 @@ protected async Task CreateWorkerAsync()
     //initialization
     Guid id = Guid.NewGuid();
 
-	//create worker (which returns true if the worker has already been created, false if it's in the initialization process, or null if creation was successful and is now in progress...apparently I'm unfamiliar with enums...)
-	bool? result = await this._webWorkerManager.CreateWorkerAsync(id);
-    if (result.GetValueOrDefault(true))
+    //create worker
+    CreateWorkerCallbackStatus status = await this._webWorkerManager.CreateWorkerAsync(id);
+    if (status != CreateWorkerCallbackStatus.AlreadyInitializing)
     {
         //worker was successfully started or created
-		this._selectedWorker = new MockWorker(id);
-		this._workers.Add(this._selectedWorker);
-		await this.StateHasChangedAsync();
-		 
+        this._selectedWorker = new MockWorker(id);
+        this._workers.Add(this._selectedWorker);
+        await this.StateHasChangedAsync();
+
         //remember that it might not be available this moment; use the callback overload if you need to execute logic as soon as it's spooled up
     }
     else
