@@ -23,16 +23,38 @@
             public const string ProxyOnly = "This method is only intended to be accessed by proxy objects.";
             public const string ObsoleteModelParameterlessConstructor = "Do not use this constructor; it is intended for deserialization only.";
         }
-        public class JavaScript
+        public class JavaScriptInterop
         {
-            public const string InvokeWorker = "invokeWorker";
-            public const string MarshalEvent = "marshalEvent";
-            public const string CreateWebWorker = "createWebWorker";
-            public const string ConnectWebWorker = "connectWebWorker";
-            public const string GetWebWorkerToken = "getWebWorkerToken";
-            public const string TerminateWebWorker = "terminateWebWorker";
-            public const string SendWebWorkerToken = "sendWebWorkerToken";
-            public const string GetWebWorkerSettings = "getWebWorkerSettings";
+            public class Functions
+            {
+                public const string Import = "import";
+                public const string MarshalEvent = "marshalEvent";
+                public const string CreateWebWorker = "createWebWorker";
+                public const string InvokeWebWorker = "invokeWebWorker";
+                public const string ConnectWebWorker = "connectWebWorker";
+                public const string GetWebWorkerToken = "getWebWorkerToken";
+                public const string SendWebWorkerToken = "sendWebWorkerToken";
+                public const string TerminateWebWorker = "terminateWebWorker";
+                public const string GetWebWorkerSettings = "getWebWorkerSettings";
+                public const string RefreshAuthenticationToken = "refreshAuthenticationToken";
+            }
+            public class Modules
+            {
+                public const string Extension = ".js";
+                public const string ImportPath = "./_content/LinesOfCode.Web.Workers/";
+
+                public class WebWorkerProxy
+                {
+                    public const string Name = "web-worker-proxy";
+                    public const string ImportPath = Modules.ImportPath + WebWorkerProxy.Name + Modules.Extension;
+                }
+
+                public class WebWorkerManager
+                {
+                    public const string Name = "web-worker-manager";
+                    public const string ImportPath = Modules.ImportPath + WebWorkerManager.Name + Modules.Extension;
+                }
+            }
         }
         public class Delimiters
         {
@@ -57,6 +79,7 @@
             public const string WebWorkerIdFieldName = "_webWorkerId";
             public const string InterfaceEventRemoveMethod = "remove_";
             public const string InvocationIdFieldName = "_invocationId";
+            public const string JavaScriptModuleFieldName = "_jsModule";
             public const string FileControlIdFieldName = "_fileControlId";
             public const string EventRegistrationsFieldName = "_eventRegistrations";
         }
@@ -75,6 +98,12 @@
                 public const string Instance = "b2c-instance";
                 public const string TenantId = "b2c-tenant-id";
                 public const string AccessScope = "b2c-access-scope";
+                public const string TokenRefreshTimeout = nameof(TokenRefreshTimeout);
+            }
+            public class TokenRefresh
+            {
+                public const int SpinWaitMilliseconds = 50;
+                public const int SpinMaxMilliseconds = 5000;
             }
         }
     }

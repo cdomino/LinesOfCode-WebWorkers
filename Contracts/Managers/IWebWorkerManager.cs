@@ -6,7 +6,7 @@ using LinesOfCode.Web.Workers.Enumerations;
 
 namespace LinesOfCode.Web.Workers.Contracts.Managers
 {
-    public interface IWebWorkerManager
+    public interface IWebWorkerManager : IDisposable, IAsyncDisposable
     {
         #region Properties
         Guid[] WebWorkerIds { get; }
@@ -14,8 +14,9 @@ namespace LinesOfCode.Web.Workers.Contracts.Managers
         #region Members
         Task WorkerCreatedAsync(Guid workerId);
         Task TerminateWorkerAsync(Guid workerId);
+        Task<AzureB2CTokenModel> GetB2CTokenAsync();
         Task<bool> SendAuthenticationTokenToWebWorkerAsync(Guid workerId);
-        I GetProxyImplementation<I>(Guid webWorkerId, string fileUploadControlId = null);
+        Task<I> GetProxyImplementationAsync<I>(Guid webWorkerId, string fileUploadControlId = null);
         void RegisterVoidEventCallback<I>(I proxy, Guid invocationId, string eventName, Func<Guid, Task> eventCallback);
         void RegisterEventCallback<I, E>(I proxy, Guid invocationId, string eventName, Func<E, Guid, Task> eventCallback);
         Task<CreateWorkerCallbackStatus> CreateWorkerAsync(Guid? workerId = null, Func<Guid, Task> createdCallback = null);

@@ -5,18 +5,22 @@ using System.Net.Http.Headers;
 using System.Collections.Generic;
 
 using Microsoft.JSInterop;
+using Microsoft.Extensions.Hosting;
+using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration.Memory;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 
+using LinesOfCode.Web.Workers.Mock;
 using LinesOfCode.Web.Workers.Models;
-using LinesOfCode.Web.Workers.Utilities;
-
-using Blazored.SessionStorage;
 using LinesOfCode.Web.Workers.Services;
+using LinesOfCode.Web.Workers.Utilities;
 using LinesOfCode.Web.Workers.Contracts.Services;
 using LinesOfCode.Web.Workers.Contracts.Managers;
+
+using Blazored.SessionStorage;
 
 namespace LinesOfCode.Web.Workers.Managers
 {
@@ -27,40 +31,61 @@ namespace LinesOfCode.Web.Workers.Managers
     {
         #region Public Methods
         /// <summary>
-        /// Registers web worker services.
+        /// Registers web worker services for Blazor Web Apps.
         /// </summary>
-        public static void AddWebWorkers(this WebAssemblyHostBuilder builder, Action<WebWorkerSettings> options = null)
+        public static void AddWebWorkers(this IHostApplicationBuilder builder, bool addMockAuthenticationDependencies = false, Action<WebWorkerSettingsModel> options = null)
         {
             //initialization
-            if (options != null)
-            {
-                //acquire options
-                Dictionary<string, string> allSettings = new Dictionary<string, string>();
-                WebWorkerSettings settings = new WebWorkerSettings();
-                options.Invoke(settings);
-
-                //check azure b2c settings
-                if (settings.AzureB2CSettings != null)
-                {
-                    //add azure b2c settings
-                    allSettings.Add(WebWorkerConstants.Security.Settings.AppId, settings.AzureB2CSettings.AppId);
-                    allSettings.Add(WebWorkerConstants.Security.Settings.Policy, settings.AzureB2CSettings.Policy);
-                    allSettings.Add(WebWorkerConstants.Security.Settings.TenantId, settings.AzureB2CSettings.TenantId);
-                    allSettings.Add(WebWorkerConstants.Security.Settings.Instance, settings.AzureB2CSettings.Instance);
-                    allSettings.Add(WebWorkerConstants.Security.Settings.AccessScope, settings.AzureB2CSettings.AccessScope);
-                }
-
-                //add settings
-                builder.Configuration.AddInMemoryCollection(allSettings);
-            }
-
-            //return
-            builder.Services.AddScoped<IWebWorkerManager, WebWorkerManager>();
-            builder.RegisterServices(new SettingsService(builder.Configuration.Build()));
+            builder.Services.AddWebWorkers(builder.Configuration, (IConfigurationRoot)builder.Configuration, addMockAuthenticationDependencies, options);
         }
 
         /// <summary>
-        /// Configures a Blazor environment for web workers.
+        /// Registers web worker services for Blazor Web Apps.
+        /// </summary>
+        public static void AddWebWorkers(this IHostApplicationBuilder builder, Action<WebWorkerSettingsModel> options = null)
+        {
+            //initialization
+            builder.Services.AddWebWorkers(builder.Configuration, (IConfigurationRoot)builder.Configuration, false, options);
+        }
+
+        /// <summary>
+        /// Registers web worker services for Blazor Web Apps.
+        /// </summary>
+        public static void AddWebWorkers(this IHostApplicationBuilder builder)
+        {
+            //initialization
+            builder.Services.AddWebWorkers(builder.Configuration, (IConfigurationRoot)builder.Configuration, false, null);
+        }
+
+        /// <summary>
+        /// Registers web worker services for Blazor WASM.
+        /// </summary>
+        public static void AddWebWorkers(this WebAssemblyHostBuilder builder, bool addMockAuthenticationDependencies = false, Action<WebWorkerSettingsModel> options = null)
+        {
+            //return
+            builder.Services.AddWebWorkers(builder.Configuration, builder.Configuration, addMockAuthenticationDependencies, options);
+        }      
+
+        /// <summary>
+        /// Registers web worker services for Blazor WASM.
+        /// </summary>
+        public static void AddWebWorkers(this WebAssemblyHostBuilder builder, Action<WebWorkerSettingsModel> options = null)
+        {
+            //return
+            builder.Services.AddWebWorkers(builder.Configuration, builder.Configuration, false, options);
+        }
+
+        /// <summary>
+        /// Registers web worker services for Blazor WASM.
+        /// </summary>
+        public static void AddWebWorkers(this WebAssemblyHostBuilder builder)
+        {
+            //return
+            builder.Services.AddWebWorkers(builder.Configuration, builder.Configuration, false, null);
+        }
+
+        /// <summary>
+        /// Configures a Blazor environment for web workers (WASM only).
         /// </summary>
         public static async Task UseWebWorkersAsync(this WebAssemblyHostBuilder builder, Action<IServiceCollection, ISettingsService> addWebWorkerDependencies = null)
         {
@@ -72,8 +97,8 @@ namespace LinesOfCode.Web.Workers.Managers
             builder.Services.AddHTTPClient(builder.HostEnvironment.BaseAddress, WebWorkerConstants.Hosting.APIAnonymous);
 
             //get settings from javascript
-            AzureB2CTokenModel token = await jsRuntime.InvokeAsync<AzureB2CTokenModel>(WebWorkerConstants.JavaScript.GetWebWorkerToken);
-            Dictionary<string, string> settings = await jsRuntime.InvokeAsync<Dictionary<string, string>>(WebWorkerConstants.JavaScript.GetWebWorkerSettings);
+            AzureB2CTokenModel token = await jsRuntime.InvokeAsync<AzureB2CTokenModel>(WebWorkerConstants.JavaScriptInterop.Functions.GetWebWorkerToken);
+            Dictionary<string, string> settings = await jsRuntime.InvokeAsync<Dictionary<string, string>>(WebWorkerConstants.JavaScriptInterop.Functions.GetWebWorkerSettings);
 
             //configure settings
             builder.Services.AddOptions();
@@ -92,9 +117,9 @@ namespace LinesOfCode.Web.Workers.Managers
                     token = httpClientSettingsService.Token;
                 }
 
-                //check token
+                //recheck token
                 if (token == null)
-                    throw new InvalidOperationException("Cannot create an authenticated http cilent because a token was not found.");
+                    throw new TokenExpiredException();
 
                 //use the auth token sent over from the main UI thread
                 client.BaseAddress = new Uri(builder.HostEnvironment.BaseAddress);
@@ -102,23 +127,76 @@ namespace LinesOfCode.Web.Workers.Managers
             });
 
             //return
-            builder.RegisterServices(settingsService);
+            builder.Services.RegisterServices(builder.Configuration, settingsService);
             addWebWorkerDependencies?.Invoke(builder.Services, settingsService);
         }
         #endregion
         #region Private Methods
         /// <summary>
-        /// Registers web worker services and resources.
+        /// Registers web worker services.
         /// </summary>
-        private static void RegisterServices(this WebAssemblyHostBuilder builder, ISettingsService settingsService = null)
+        private static void AddWebWorkers(this IServiceCollection services, IConfigurationBuilder configurationBuilder, IConfigurationRoot configurationRoot, bool addMockDependencies, Action<WebWorkerSettingsModel> options = null)
         {
             //initialization
-            builder.Services.AddSingleton<ISerializationService, SerializationService>();
-            builder.Services.AddSingleton(typeof(IMemoryCacheManager<,>), typeof(MemoryCacheManager<,>));
-            builder.Services.AddSingleton<ISettingsService>(settingsService ?? new SettingsService(builder.Configuration));
+            if (options != null)
+            {
+                //acquire options
+                Dictionary<string, string> allSettings = new Dictionary<string, string>();
+                WebWorkerSettingsModel settings = new WebWorkerSettingsModel();
+                options.Invoke(settings);
+
+                //check azure b2c settings
+                if (settings.AzureB2CSettings != null)
+                {
+                    //add azure b2c settings
+                    allSettings.Add(WebWorkerConstants.Security.Settings.AppId, settings.AzureB2CSettings.AppId);
+                    allSettings.Add(WebWorkerConstants.Security.Settings.Policy, settings.AzureB2CSettings.Policy);
+                    allSettings.Add(WebWorkerConstants.Security.Settings.TenantId, settings.AzureB2CSettings.TenantId);
+                    allSettings.Add(WebWorkerConstants.Security.Settings.Instance, settings.AzureB2CSettings.Instance);
+                    allSettings.Add(WebWorkerConstants.Security.Settings.AccessScope, settings.AzureB2CSettings.AccessScope);
+
+                    //set token timout
+                    int tokenRefreshTimeout = settings.AzureB2CSettings.TokenRefreshTimeoutMilliseconds ?? WebWorkerConstants.Security.TokenRefresh.SpinMaxMilliseconds;
+                    allSettings.Add(WebWorkerConstants.Security.Settings.TokenRefreshTimeout, Math.Max(tokenRefreshTimeout, WebWorkerConstants.Security.TokenRefresh.SpinWaitMilliseconds).ToString());
+                }
+
+                //add settings
+                configurationBuilder.AddInMemoryCollection(allSettings);
+            }
 
             //return
-            builder.Services.AddBlazoredSessionStorage(options => options.JsonSerializerOptions.ApplyJSONConfiguration(true));
+            services.AddScoped<IWebWorkerManager, WebWorkerManager>();
+            services.RegisterServices(configurationRoot, new SettingsService(configurationRoot));
+            if (addMockDependencies)
+                services.AddMockDependencies();
+        }
+
+        /// <summary>
+        /// Registers web worker services and resources.
+        /// </summary>
+        private static void RegisterServices(this IServiceCollection services, IConfigurationRoot configurationRoot, ISettingsService settingsService = null)
+        {
+            //initialization
+            services.AddSingleton<ISerializationService, SerializationService>();
+            services.AddSingleton(typeof(IMemoryCacheManager<,>), typeof(MemoryCacheManager<,>));
+            services.AddSingleton<ISettingsService>(settingsService ?? new SettingsService(configurationRoot));
+
+            //return
+            services.AddBlazoredSessionStorage(options => options.JsonSerializerOptions.ApplyJSONConfiguration(true));
+        }
+
+        /// <summary>
+        /// Adds mock authentication and navigation services to satisify authentication dependencies.
+        /// </summary>        
+        private static void AddMockDependencies(this IServiceCollection services)
+        {
+            //initialization
+            services.AddScoped<MockNavigationManager>();
+            services.AddScoped<MockAuthenticationStateProvider>();
+
+            //return
+            services.AddScoped<NavigationManager>(c => c.GetRequiredService<MockNavigationManager>());
+            services.AddScoped<AuthenticationStateProvider>(c => c.GetRequiredService<MockAuthenticationStateProvider>());
         }
 
         /// <summary>
@@ -127,11 +205,23 @@ namespace LinesOfCode.Web.Workers.Managers
         private static IJSInProcessRuntime GetJSRuntime()
         {
             //initialization
+            string message = "The default WASM JSRuntime ";
             Type jsRuntimeType = typeof(WebAssemblyHost).Assembly.GetType(WebWorkerConstants.Hosting.JSRuntime.TypeName);
-            FieldInfo instanceField = jsRuntimeType.GetField(WebWorkerConstants.Hosting.JSRuntime.Instance, BindingFlags.NonPublic | BindingFlags.Static);
+            if (jsRuntimeType == null)
+                throw new Exception($"{message} type {WebWorkerConstants.Hosting.JSRuntime.TypeName}could not be found.");
+
+            //get the field the holds the default JS runime
+            FieldInfo instanceField = jsRuntimeType.GetField(WebWorkerConstants.Hosting.JSRuntime.Instance, BindingFlags.Public | BindingFlags.Static);
+            if (instanceField == null)
+                throw new Exception($"{message} field {WebWorkerConstants.Hosting.JSRuntime.Instance}could not be found.");
+
+            //get instance object
+            IJSInProcessRuntime jsRuntime = (IJSInProcessRuntime)instanceField.GetValue(null);
+            if (jsRuntime == null)
+                throw new Exception($"{message}is null.");
 
             //return
-            return (IJSInProcessRuntime)instanceField.GetValue(null);
+            return jsRuntime;
         }
 
         /// <summary>

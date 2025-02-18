@@ -16,40 +16,30 @@ using LinesOfCode.Web.Workers.Enumerations;
 using LinesOfCode.Web.Workers.Contracts.Services;
 using LinesOfCode.Web.Workers.Contracts.Managers;
 
-using MoreLinq;
 using Blazored.SessionStorage;
 
 namespace LinesOfCode.Web.Workers.Managers
 {
     /// <summary>
-    /// This manages web workers.
+    /// This provides configuration and lifecycle management for web worker instances.
     /// </summary>
-    public class WebWorkerManager : IWebWorkerManager, IDisposable
+    public class WebWorkerManager : BaseModuleManager<WebWorkerManager>, IWebWorkerManager
     {
         #region Members
-        private readonly IJSRuntime _jsRuntime;
+        private readonly List<Guid> _webWorkerIds;
         private readonly ILogger<WebWorkerManager> _logger;
         private readonly ISettingsService _settingsService;
-        private readonly List<Guid> _webWorkerIds = new List<Guid>();
+        private readonly Lazy<ModuleBuilder> _moduleBuilder;
         private readonly ISerializationService _serializationManager;
         private readonly IMemoryCacheManager<string, Type> _typeCache;
-        private readonly ISessionStorageService _sessionStorageService;
+        private readonly ISessionStorageService _sessionStorageService; 
         private readonly IMemoryCacheManager<string, MethodInfo> _handlerCache;
         private readonly AuthenticationStateProvider _authenticationStateProvider;
-        private readonly DotNetObjectReference<WebWorkerManager> _jsReference = null;
-        private readonly Dictionary<Guid, List<Func<Guid, Task>>> _creationCallbacks = new Dictionary<Guid, List<Func<Guid, Task>>>();
-        private readonly Dictionary<string, Dictionary<string, Type>> _proxyReturnTypes = new Dictionary<string, Dictionary<string, Type>>();
-        private readonly Dictionary<Guid, Dictionary<string, object>> _proxyEventCallbacks = new Dictionary<Guid, Dictionary<string, object>>();
-        private readonly Dictionary<string, Dictionary<string, object>> _proxySuccessCallbacks = new Dictionary<string, Dictionary<string, object>>();
-        private readonly Dictionary<string, Dictionary<string, Func<ErrorMessageModel, Task>>> _proxyErrorCallbacks = new Dictionary<string, Dictionary<string, Func<ErrorMessageModel, Task>>>();
-        private readonly Lazy<ModuleBuilder> _moduleBuilder = new Lazy<ModuleBuilder>(() =>
-        {
-            //initialization
-            AssemblyBuilder assemblyBuilder = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName(Guid.NewGuid().ToString()), AssemblyBuilderAccess.Run);
-
-            //only build module once
-            return assemblyBuilder.DefineDynamicModule(nameof(WebWorkerManager));
-        });
+        private readonly Dictionary<Guid, List<Func<Guid, Task>>> _creationCallbacks;
+        private readonly Dictionary<string, Dictionary<string, Type>> _proxyReturnTypes;
+        private readonly Dictionary<Guid, Dictionary<string, object>> _proxyEventCallbacks;
+        private readonly Dictionary<string, Dictionary<string, object>> _proxySuccessCallbacks;
+        private readonly Dictionary<string, Dictionary<string, Func<ErrorMessageModel, Task>>> _proxyErrorCallbacks;
         #endregion
         #region Initialization
         public WebWorkerManager(IJSRuntime jsRuntime,
@@ -59,32 +49,40 @@ namespace LinesOfCode.Web.Workers.Managers
                                 IMemoryCacheManager<string, Type> typeCache,
                                 ISessionStorageService sessionStorageService,                                
                                 IMemoryCacheManager<string, MethodInfo> handlerCache,
-                                AuthenticationStateProvider authenticationStateProvider)
+                                AuthenticationStateProvider authenticationStateProvider) : base(jsRuntime, WebWorkerConstants.JavaScriptInterop.Modules.WebWorkerManager.ImportPath)
         {
             //initialization
-            this._logger = logger;
-            this._jsRuntime = jsRuntime;
-            this._typeCache = typeCache;
-            this._handlerCache = handlerCache;
-            this._settingsService = settingsService;
-            this._serializationManager = serializationManager;
-            this._sessionStorageService = sessionStorageService;
-            this._authenticationStateProvider = authenticationStateProvider;
+            this._webWorkerIds = new List<Guid>();
+            this._creationCallbacks = new Dictionary<Guid, List<Func<Guid, Task>>>();
+            this._proxyReturnTypes = new Dictionary<string, Dictionary<string, Type>>();
+            this._proxyEventCallbacks = new Dictionary<Guid, Dictionary<string, object>>();
+            this._proxySuccessCallbacks = new Dictionary<string, Dictionary<string, object>>();
+            this._proxyErrorCallbacks = new Dictionary<string, Dictionary<string, Func<ErrorMessageModel, Task>>>();
+
+            //ensure dependencies
+            this._logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            this._typeCache = typeCache ?? throw new ArgumentNullException(nameof(typeCache));            
+            this._handlerCache = handlerCache ?? throw new ArgumentNullException(nameof(handlerCache));
+            this._settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService));
+            this._serializationManager = serializationManager ?? throw new ArgumentNullException(nameof(serializationManager));
+            this._sessionStorageService = sessionStorageService ?? throw new ArgumentNullException(nameof(sessionStorageService));
+            this._authenticationStateProvider = authenticationStateProvider ?? throw new ArgumentNullException(nameof(authenticationStateProvider));
 
             //return
-            this._jsReference = DotNetObjectReference.Create(this);
+            this._moduleBuilder = new Lazy<ModuleBuilder>(() =>
+            {
+                //initialization
+                AssemblyBuilder assemblyBuilder = AssemblyBuilder.DefineDynamicAssembly(new AssemblyName(Guid.NewGuid().ToString()), AssemblyBuilderAccess.Run);
+
+                //only build module once
+                return assemblyBuilder.DefineDynamicModule(nameof(WebWorkerManager));
+            });
         }
         #endregion
         #region Properties
         public Guid[] WebWorkerIds => this._webWorkerIds.ToArray();
         #endregion
         #region Public Methods
-        public void Dispose()
-        {
-            //return
-            this._jsReference?.Dispose();
-        }
-
         /// <summary>
         /// Creates a new instance of a web worker.
         /// </summary>
@@ -109,8 +107,9 @@ namespace LinesOfCode.Web.Workers.Managers
             }
 
             //create worker
+            IJSObjectReference module = await this.GetModuleAsync();
             AzureB2CTokenModel token = await this.GetB2CTokenAsync();
-            await this._jsRuntime.InvokeVoidAsync(WebWorkerConstants.JavaScript.CreateWebWorker, id, this._jsReference, nameof(this.WorkerCreatedAsync), nameof(this.WebWorkerFinishedAsync), nameof(this.WebWorkerFailedAsync), nameof(this.WebWorkerEventRaisedAsync), this._settingsService.GetAllSettings(), token);
+            await module.InvokeVoidAsync(WebWorkerConstants.JavaScriptInterop.Functions.CreateWebWorker, id, this._jsReference, nameof(this.WorkerCreatedAsync), nameof(this.WebWorkerFinishedAsync), nameof(this.WebWorkerFailedAsync), nameof(this.WebWorkerEventRaisedAsync), nameof(this.GetB2CTokenAsync), this._settingsService.GetAllSettings(), token);
 
             //register callback
             this._creationCallbacks.Add(id, new List<Func<Guid, Task>>() { createdCallback });
@@ -132,23 +131,28 @@ namespace LinesOfCode.Web.Workers.Managers
                 this._logger.LogWarning($"Cannot send a null token to web worker {workerId}.");
                 return false;
             }
+            else
+            {
+                //send token
+                IJSObjectReference module = await this.GetModuleAsync();
+                await module.InvokeVoidAsync(WebWorkerConstants.JavaScriptInterop.Functions.SendWebWorkerToken, workerId, token);
 
-            //return
-            await this._jsRuntime.InvokeVoidAsync(WebWorkerConstants.JavaScript.SendWebWorkerToken, workerId, token);
-            return true;
+                //return
+                return true;
+            }
         }
 
         /// <summary>
         /// Allows a caller to register an additional callback for a web worker.
         /// </summary>
-        public async Task<AdditionalWorkerCallbackStatus> RegisterWorkerCreationCallbackAsync(Guid workerId, Func<Guid, Task> createdCallback)
+        public async Task<AdditionalWorkerCallbackStatus> RegisterWorkerCreationCallbackAsync(Guid workerId, Func<Guid, Task> createdCallbackAsync)
         {
             //initialization
             if (this._creationCallbacks.ContainsKey(workerId))
             {
                 //callback registered
                 this._logger.LogInformation($"Registered callback for web worker {workerId}.");
-                this._creationCallbacks[workerId].Add(createdCallback);
+                this._creationCallbacks[workerId].Add(createdCallbackAsync);
 
                 //return
                 return AdditionalWorkerCallbackStatus.Registered;
@@ -157,7 +161,7 @@ namespace LinesOfCode.Web.Workers.Managers
             {
                 //call method now
                 this._logger.LogInformation($"Since web worker {workerId} is already created, invoking callback now.");
-                await createdCallback(workerId);
+                await createdCallbackAsync(workerId);
 
                 //return
                 return AdditionalWorkerCallbackStatus.Executed; 
@@ -176,10 +180,11 @@ namespace LinesOfCode.Web.Workers.Managers
         public async Task TerminateWorkerAsync(Guid workerId)
         {
             //initialization
+            IJSObjectReference module = await this.GetModuleAsync();
             this._logger.LogInformation($"Terminated web worker {workerId}.");
 
             //return
-            await this._jsRuntime.InvokeVoidAsync(WebWorkerConstants.JavaScript.TerminateWebWorker, workerId);
+            await module.InvokeVoidAsync(WebWorkerConstants.JavaScriptInterop.Functions.TerminateWebWorker, workerId);
             this._creationCallbacks.Remove(workerId);
             this._webWorkerIds.Remove(workerId);
         }
@@ -187,16 +192,19 @@ namespace LinesOfCode.Web.Workers.Managers
         /// <summary>
         /// Returns a new interface that proxies all method invocations to a JavaScript web worker.
         /// </summary>
-        public I GetProxyImplementation<I>(Guid webWorkerId, string fileUploadControlId = null)
+        public async Task<I> GetProxyImplementationAsync<I>(Guid webWorkerId, string fileUploadControlId = null)
         {
             //initialization           
             Type interfaceType = typeof(I);
             if (!interfaceType.IsInterface)
                 throw new ArgumentException($"Cannot proxy {interfaceType.Name}: the type must be an interface.");
 
-            //check type cache
-            string proxyTypeName = $"{interfaceType.FullName}.Proxy";
+            //get module
+            IJSObjectReference module = await this.GetModuleAsync();
             fileUploadControlId = fileUploadControlId ?? string.Empty;
+            string proxyTypeName = $"{interfaceType.FullName}.{nameof(WebWorkerConstants.Proxy)}";
+
+            //check type cache
             Type proxyType = this._typeCache.GetOrAdd(proxyTypeName, (_) =>
             {
                 //define common types
@@ -208,9 +216,9 @@ namespace LinesOfCode.Web.Workers.Managers
                 Type stringType = typeof(string);
                 Type typeArrayType = typeof(Type[]);
                 Type delegateType = typeof(Delegate);
-                Type jsRuntimeType = typeof(IJSRuntime);
                 Type objectArrayType = typeof(object[]);
                 Type stringArrayType = typeof(string[]);
+                Type jsModuleType = typeof(IJSObjectReference);
                 Type dictionaryStringStringType = typeof(Dictionary<string, string>);
 
                 //build a type that implements the given interface
@@ -222,19 +230,18 @@ namespace LinesOfCode.Web.Workers.Managers
                     this._proxyReturnTypes.Add(interfaceType.AssemblyQualifiedName, new Dictionary<string, Type>());
 
                 //create fields to hold the JS runtime and worker id
-                string jsFieldName = nameof(this._jsRuntime);
-                FieldBuilder jsField = typeBuilder.DefineField(jsFieldName, jsRuntimeType, FieldAttributes.Private);
                 FieldBuilder webWorkerIdField = typeBuilder.DefineField(WebWorkerConstants.Proxy.WebWorkerIdFieldName, guidType, FieldAttributes.Private);
+                FieldBuilder jsModuleField = typeBuilder.DefineField(WebWorkerConstants.Proxy.JavaScriptModuleFieldName, jsModuleType, FieldAttributes.Private);
                 FieldBuilder fileControlIdField = typeBuilder.DefineField(WebWorkerConstants.Proxy.FileControlIdFieldName, stringType, FieldAttributes.Private);
 
                 //create a constructor
-                ConstructorBuilder constuctor = typeBuilder.DefineConstructor(MethodAttributes.Public, CallingConventions.Standard, new Type[] { jsRuntimeType, guidType, stringType });
+                ConstructorBuilder constuctor = typeBuilder.DefineConstructor(MethodAttributes.Public, CallingConventions.Standard, new Type[] { jsModuleType, guidType, stringType });
                 ILGenerator constructorIL = constuctor.GetILGenerator();
 
                 //store JS runtime
                 constructorIL.Emit(OpCodes.Ldarg_0);
                 constructorIL.Emit(OpCodes.Ldarg_1);
-                constructorIL.Emit(OpCodes.Stfld, jsField);
+                constructorIL.Emit(OpCodes.Stfld, jsModuleField);
 
                 //store web worker id
                 constructorIL.Emit(OpCodes.Ldarg_0);
@@ -525,7 +532,7 @@ namespace LinesOfCode.Web.Workers.Managers
             });
 
             //return
-            return (I)Activator.CreateInstance(proxyType, this._jsRuntime, webWorkerId, fileUploadControlId);
+            return (I)Activator.CreateInstance(proxyType, module, webWorkerId, fileUploadControlId);
         }
 
         /// <summary>
@@ -685,11 +692,16 @@ namespace LinesOfCode.Web.Workers.Managers
         {
             //initialization
             this._webWorkerIds.Add(workerId);
+            List<Task> tasks = new List<Task>();
             this._logger.LogDebug($"Created and web worker {workerId}.");
 
+            //check worker callbacks
+            if (!this._creationCallbacks.ContainsKey(workerId))
+                throw new Exception($"No callbacks have been registered for worker {workerId}.");
+
             //fire callbacks
-            List<Task> tasks = new List<Task>();
-            this._creationCallbacks[workerId].Where(c => c != null).ForEach(c => tasks.Add(c.Invoke(workerId)));
+            foreach (Func<Guid, Task> callback in this._creationCallbacks[workerId].Where(c => c != null))
+                tasks.Add(callback.Invoke(workerId));
 
             //wait for work to finish
             AggregateException error = await WebWorkerUtilities.WhenAllAsync(tasks);
@@ -770,58 +782,10 @@ namespace LinesOfCode.Web.Workers.Managers
         }
 
         /// <summary>
-        /// This is the method invoked to proxy sync void calls.
-        /// </summary>
-        [Obsolete(WebWorkerConstants.Messages.ProxyOnly)]
-        public void ProxyMethodVoidSync(Type interfaceType, string methodName, Type returnType, Type[] genericTypes, string[] argNames, Type[] argTypes, object[] argValues)
-        {
-            //return
-            this.ProxyMethodReturnSync<object>(interfaceType, methodName, returnType, genericTypes, argNames, argTypes, argValues);
-        }
-
-        /// <summary>
-        /// This is the method invoked to proxy sync return calls.
-        /// </summary>
-        [Obsolete(WebWorkerConstants.Messages.ProxyOnly)]
-        public T ProxyMethodReturnSync<T>(Type interfaceType, string methodName, Type returnType, Type[] genericTypes, string[] argNames, Type[] argTypes, object[] argValues)
-        {
-            //initialization
-            ProxyModel model = this.GetProxyModel(interfaceType, methodName, returnType, genericTypes, argNames, argTypes, argValues);
-
-            //return
-            WebWorkerUtilities.FireAndForget(async () => await this.InvokeProxyMethodAsync(model), null);
-            return default(T);
-        }
-
-        /// <summary>
-        /// This is the method invoked to proxy async void calls.
-        /// </summary>
-        [Obsolete(WebWorkerConstants.Messages.ProxyOnly)]
-        public async Task ProxyMethodVoidAsync(Type interfaceType, string methodName, Type returnType, Type[] genericTypes, string[] argNames, Type[] argTypes, object[] argValues)
-        {
-            //return
-            await this.ProxyMethodReturnAsync<object>(interfaceType, methodName, returnType, genericTypes, argNames, argTypes, argValues);
-        }
-
-        /// <summary>
-        /// This is the method invoked to proxy async return calls.
-        /// </summary>
-        [Obsolete(WebWorkerConstants.Messages.ProxyOnly)]
-        public async Task<T> ProxyMethodReturnAsync<T>(Type interfaceType, string methodName, Type returnType, Type[] genericTypes, string[] argNames, Type[] argTypes, object[] argValues)
-        {
-            //initialization
-            ProxyModel model = this.GetProxyModel(interfaceType, methodName, returnType, genericTypes, argNames, argTypes, argValues);
-
-            //return
-            await this.InvokeProxyMethodAsync(model);
-            return default(T);
-        }
-        #endregion           
-        #region Private Methods
-        /// <summary>
         /// Gets an Azure B2C token from browser session storage.
         /// </summary>
-        private async Task<AzureB2CTokenModel> GetB2CTokenAsync()
+        [JSInvokable()]
+        public async Task<AzureB2CTokenModel> GetB2CTokenAsync()
         {
             //initialization
             AuthenticationState state = await this._authenticationStateProvider.GetAuthenticationStateAsync();
@@ -853,7 +817,56 @@ namespace LinesOfCode.Web.Workers.Managers
             //return
             return token;
         }
+        
+        /// <summary>
+        /// This is the method invoked to proxy sync void calls.
+        /// </summary>
+        [Obsolete(WebWorkerConstants.Messages.ProxyOnly)]
+        public void ProxyMethodVoidSync(Type interfaceType, string methodName, Type returnType, Type[] genericTypes, string[] argNames, Type[] argTypes, object[] argValues)
+        {
+            //return
+            this.ProxyMethodReturnSync<object>(interfaceType, methodName, returnType, genericTypes, argNames, argTypes, argValues);
+        }
 
+        /// <summary>
+        /// This is the method invoked to proxy sync return calls.
+        /// </summary>
+        [Obsolete(WebWorkerConstants.Messages.ProxyOnly)]
+        public T ProxyMethodReturnSync<T>(Type interfaceType, string methodName, Type returnType, Type[] genericTypes, string[] argNames, Type[] argTypes, object[] argValues)
+        {
+            //initialization
+            ProxyModel model = this.GetProxyModel(interfaceType, methodName, returnType, genericTypes, argNames, argTypes, argValues);
+
+            //return
+            WebWorkerUtilities.FireAndForget(async () => await this.InvokeProxyMethodAsync(model), this._logger);
+            return default(T);
+        }
+
+        /// <summary>
+        /// This is the method invoked to proxy async void calls.
+        /// </summary>
+        [Obsolete(WebWorkerConstants.Messages.ProxyOnly)]
+        public async Task ProxyMethodVoidAsync(Type interfaceType, string methodName, Type returnType, Type[] genericTypes, string[] argNames, Type[] argTypes, object[] argValues)
+        {
+            //return
+            await this.ProxyMethodReturnAsync<object>(interfaceType, methodName, returnType, genericTypes, argNames, argTypes, argValues);
+        }
+
+        /// <summary>
+        /// This is the method invoked to proxy async return calls.
+        /// </summary>
+        [Obsolete(WebWorkerConstants.Messages.ProxyOnly)]
+        public async Task<T> ProxyMethodReturnAsync<T>(Type interfaceType, string methodName, Type returnType, Type[] genericTypes, string[] argNames, Type[] argTypes, object[] argValues)
+        {
+            //initialization
+            ProxyModel model = this.GetProxyModel(interfaceType, methodName, returnType, genericTypes, argNames, argTypes, argValues);
+
+            //return
+            await this.InvokeProxyMethodAsync(model);
+            return default(T);
+        }
+        #endregion           
+        #region Private Methods       
         /// <summary>
         /// Builds a proxy model from IL-generated methods.
         /// </summary>
@@ -889,8 +902,8 @@ namespace LinesOfCode.Web.Workers.Managers
         {
             //initialization
             Type proxyType = this.GetType();
-            FieldInfo jsRuntimeField = this.GetPrivateField(proxyType, nameof(this._jsRuntime));
             FieldInfo webWorkerIdField = this.GetPrivateField(proxyType, WebWorkerConstants.Proxy.WebWorkerIdFieldName);
+            FieldInfo jsModuleField = this.GetPrivateField(proxyType, WebWorkerConstants.Proxy.JavaScriptModuleFieldName);
             FieldInfo invocationIdField = this.GetPrivateField(proxyType, WebWorkerConstants.Proxy.InvocationIdFieldName);
             FieldInfo fileControlIdField = this.GetPrivateField(proxyType, WebWorkerConstants.Proxy.FileControlIdFieldName);
             FieldInfo eventRegistrationsField = this.GetPrivateField(proxyType, WebWorkerConstants.Proxy.EventRegistrationsFieldName);
@@ -898,12 +911,12 @@ namespace LinesOfCode.Web.Workers.Managers
             //get field values
             Guid webWorkerId = (Guid)webWorkerIdField.GetValue(this);
             Guid invocationId = (Guid)invocationIdField.GetValue(this);
-            IJSRuntime jsRuntime = (IJSRuntime)jsRuntimeField.GetValue(this);
             string fileUploadControlId = (string)fileControlIdField.GetValue(this);
+            IJSObjectReference module = (IJSObjectReference)jsModuleField.GetValue(this);
             Dictionary<string, string> eventRegistrations = (Dictionary<string, string>)eventRegistrationsField.GetValue(this);
 
             //return
-            await jsRuntime.InvokeVoidAsync(WebWorkerConstants.JavaScript.InvokeWorker, webWorkerId, invocationId, model, eventRegistrations, fileUploadControlId);
+            await module.InvokeVoidAsync(WebWorkerConstants.JavaScriptInterop.Functions.InvokeWebWorker, webWorkerId, invocationId, model, eventRegistrations, fileUploadControlId);
         }
 
         /// <summary>

@@ -14,7 +14,7 @@ using LinesOfCode.Web.Workers.Contracts.Services;
 namespace LinesOfCode.Web.Workers.Services
 {
     /// <summary>
-    /// Encapsulates all serialization and deserialization logic using JSON.
+    /// Encapsulates all serialization and deserialization logic using .NET JSON.
     /// </summary>
     public class SerializationService : ISerializationService
     {

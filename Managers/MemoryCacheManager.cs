@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Collections.Concurrent;
 
 using Microsoft.Extensions.Logging;
+
 using LinesOfCode.Web.Workers.Utilities;
 using LinesOfCode.Web.Workers.Contracts.Managers;
 

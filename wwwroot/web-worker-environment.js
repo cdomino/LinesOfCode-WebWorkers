@@ -1,5 +1,13 @@
 ﻿'use strict';
 
+/************************
+ *WEB WORKER ENVIRONMENT*
+ ************************/
+
+///////////
+//MEMBERS//
+///////////
+
 //Blazor requires a Comment class to exist.
 class Comment { }
 
@@ -108,7 +116,6 @@ class DOM extends Node
         this.body = null;
     }
 
-    //Required by Blazor.
     get documentElement()
     {
         //return
@@ -118,7 +125,6 @@ class DOM extends Node
             return null;
     }
 
-    //Required by Blazor.
     createElement(tagName)
     {
         //initialization
@@ -129,7 +135,6 @@ class DOM extends Node
         return element;
     }
 
-    //Required by Blazor.
     createElementNS(namespaceURI, tagName)
     {
         //initialization
@@ -140,11 +145,22 @@ class DOM extends Node
         return element;
     }
 
-    //Required by Blazor.
-    querySelector(selector)
+    createComment(comment)
+    {
+        //return
+        return new Comment(comment);
+    }
+
+    querySelector(selectors)
     {
         //return
         return this.body;
+    }
+
+    querySelectorAll(selectors)
+    {
+        //return
+        return [this.body];
     }
 
     //This exposes the "native" location object as required by Blazor.
@@ -152,7 +168,7 @@ class DOM extends Node
     {
         //return
         return location;
-    }
+    }   
 
     //This loads the Blazor script.
     loadBlazor()
@@ -165,6 +181,10 @@ class DOM extends Node
         importScripts(scriptURL);
     }
 }
+
+///////////////////
+//PUBLIC METHODS//
+///////////////////
 
 //This creates instances of mocked objects to satisfy Blazor JavaScript calls in a non-DOM context.
 function createProxy(instance, handler)
@@ -191,23 +211,3 @@ function createProxy(instance, handler)
                         }
                     });
 }
-
-//This bootstraps a Web Worker environment.
-(function ()
-{
-    //initialization
-    if (typeof globalThis.document !== 'undefined')
-        return;
-
-    //create window
-    globalThis.window = createProxy(self, new Node());
-    globalThis.window.parent = globalThis.window;
-
-    //create document (Blazor also requires history to be instantiated)
-    globalThis.document = createProxy(new DOM());
-    globalThis.history = createProxy(new Comment());
-
-    //return
-    var url = globalThis.location.href;
-    document.baseURI = url.substring(0, url.lastIndexOf('/') + 1);
-})();

@@ -9,26 +9,13 @@ using System.ComponentModel;
 using System.Reflection.Emit;
 using System.Threading.Tasks;
 using System.Security.Claims;
-using System.Net.Http.Headers;
 using System.Text.Encodings.Web;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
 using System.Text.Json.Serialization;
 using System.ComponentModel.DataAnnotations;
 
-using Microsoft.JSInterop;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Configuration.Memory;
-using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
-
-using LinesOfCode.Web.Workers.Models;
-using LinesOfCode.Web.Workers.Managers;
-using LinesOfCode.Web.Workers.Contracts;
-
-using MoreLinq;
-using Blazored.SessionStorage;
 
 namespace LinesOfCode.Web.Workers.Utilities
 {
@@ -266,7 +253,7 @@ namespace LinesOfCode.Web.Workers.Utilities
             if (!items?.Any() ?? true)
                 return "N/A";
             else
-                return items.ToDelimitedString(separator);
+                return string.Join(separator, items);
         }
 
         /// <summary>
@@ -470,11 +457,12 @@ namespace LinesOfCode.Web.Workers.Utilities
         public static string Pluralize(this double count, string noun, string pluralTerm = "s")
         {
             //initialization
+            double absoluteCount = Math.Abs(count);
             noun = noun.TrimEnd(new char[] { 's', 'S' });
             int pluralTrimLength = noun.ToLowerInvariant().EndsWith("ex".ToLowerInvariant()) ? 2 : 1;
 
             //return
-            return $"{count} {(pluralTerm == "s" ? noun : count != 1 ? noun.Substring(0, noun.Length - pluralTrimLength) : noun)}{(count == 1 ? string.Empty : pluralTerm)}";
+            return $"{count} {(pluralTerm == "s" ? noun : absoluteCount != 1 ? noun.Substring(0, noun.Length - pluralTrimLength) : noun)}{(absoluteCount == 1 ? string.Empty : pluralTerm)}";
         }
         #endregion       
     }

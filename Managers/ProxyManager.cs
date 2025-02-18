@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Net;
 using System.Linq;
+using System.Net.Http;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Threading.Tasks;
@@ -7,7 +9,6 @@ using System.Collections.Generic;
 
 using Microsoft.JSInterop;
 using Microsoft.Extensions.Logging;
-using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 
 using LinesOfCode.Web.Workers.Models;
@@ -20,27 +21,35 @@ namespace LinesOfCode.Web.Workers.Managers
     /// <summary>
     /// This handles calling .NET services from a web worker.
     /// </summary>
-    public class ProxyManager : ComponentBase, IDisposable
+    public class ProxyManager : BaseModuleManager<ProxyManager>, IProxyManager
     {
         #region Members
-        private DotNetObjectReference<ProxyManager> _jsReference = null;
-        private Dictionary<Guid, ProxyModel> _proxies = new Dictionary<Guid, ProxyModel>();
+        private string _refreshedToken;
+        private readonly IServiceProvider _container;
+        private readonly ILogger<ProxyManager> _logger;
+        private readonly ISettingsService _settingsService;
+        private readonly Dictionary<Guid, ProxyModel> _proxies;
+        private readonly ISerializationService _serializationManager;
+        private readonly IMemoryCacheManager<Type, MethodInfo> _marshallerCache;
         #endregion
-        #region Dependencies
-        [Inject()]
-        private IJSRuntime _jsRuntime { get; set; }
-
-        [Inject()]
-        private IServiceProvider _container { get; set; }
-
-        [Inject()]
-        private ILogger<ProxyManager> _logger { get; set; }
-
-        [Inject()]
-        private ISerializationService _serializationManager { get; set; }
-
-        [Inject()]
-        private IMemoryCacheManager<Type, MethodInfo> _marshallerCache { get; set; }
+        #region Initialization
+        public ProxyManager(IJSRuntime jsRuntime,
+                            IServiceProvider container,
+                            ILogger<ProxyManager> logger,
+                            ISettingsService settingsService,
+                            ISerializationService serializationService,
+                            IMemoryCacheManager<Type, MethodInfo> marshallerCache) : base(jsRuntime, WebWorkerConstants.JavaScriptInterop.Modules.WebWorkerProxy.ImportPath)
+        {
+            //initialization
+            this._proxies = new Dictionary<Guid, ProxyModel>();
+            
+            //return
+            this._logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            this._container = container ?? throw new ArgumentNullException(nameof(container));
+            this._settingsService = settingsService ?? throw new ArgumentNullException(nameof(settingsService));
+            this._marshallerCache = marshallerCache ?? throw new ArgumentNullException(nameof(marshallerCache));
+            this._serializationManager = serializationService ?? throw new ArgumentNullException(nameof(serializationService));
+        }
         #endregion       
         #region Events
         protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -49,18 +58,12 @@ namespace LinesOfCode.Web.Workers.Managers
             if (firstRender)
             {
                 //return
-                this._jsReference = DotNetObjectReference.Create(this);
-                await this._jsRuntime.InvokeVoidAsync(WebWorkerConstants.JavaScript.ConnectWebWorker, this._jsReference, nameof(this.RunMethodAsync), nameof(this.SetAuthenticationTokenAsync));
+                IJSObjectReference module = await this.GetModuleAsync();
+                await module.InvokeVoidAsync(WebWorkerConstants.JavaScriptInterop.Functions.ConnectWebWorker, this._jsReference, nameof(this.RunMethodAsync), nameof(this.SetAuthenticationTokenAsync), nameof(this.RefreshAuthenticationTokenAsync));
             }
         }
         #endregion
         #region Public Methods
-        public void Dispose()
-        {
-            //return
-            this._jsReference?.Dispose();
-        }
-
         /// <summary>
         /// To avoid copious serialization, this strategy uses flags and direct casting to invoke well-known .NET methods from web workers.
         /// </summary>
@@ -112,7 +115,7 @@ namespace LinesOfCode.Web.Workers.Managers
                         parameters.Add(value.ConvertFromString(type));
                     }
                 }
-            }         
+            }
 
             //check events
             if (eventRegistrationData?.Any() ?? false)
@@ -179,9 +182,10 @@ namespace LinesOfCode.Web.Workers.Managers
             bool isGeneric = method.ReturnType.IsGenericType;
             this._logger.LogInformation($"Extracted {parameters.Pluralize("parameter")} for{message}.");
 
-            try
+            //this performs the method invocation
+            async Task<object> invokeMethodAsync()
             {
-                //invoke method
+                //initialization
                 this._logger.LogInformation($"Invoking method for{message}.");
                 object result = method.Invoke(interfaceImplementation, parameters.ToArray());
 
@@ -223,20 +227,112 @@ namespace LinesOfCode.Web.Workers.Managers
                     return result;
                 }
             }
-            catch (Exception ex)
+
+            //this logs invocation exceptions
+            void logExcpetion(Exception excpetion)
             {
-                //error
-                this._logger.LogError($"Unable to complete method invocation {invocationId} of {model.MethodName} on {model.InterfaceType}: {ex}");
+                //return
+                this._logger.LogError($"Unable to complete method invocation {invocationId} of {model.MethodName} on {model.InterfaceType}: {excpetion}");
+            }
+
+            //this blocks the worker until a new token is acquired from the UI thread or the wait times out
+            async Task<InvocationRetryModel> acquireRefreshedTokenAndRetryInvocationAsync(Exception tokenException)
+            {
+                //initialization
+                this._refreshedToken = null;
+                int ellapsedMilliseconds = 0;
+                IJSObjectReference module = await this.GetModuleAsync();
+                int timeout = this._settingsService.GetSetting<int>(WebWorkerConstants.Security.Settings.TokenRefreshTimeout);
+                
+                //start getting a new token
+                this._logger.LogWarning("Token expiration detected. Attempting refresh...");
+                await module.InvokeVoidAsync(WebWorkerConstants.JavaScriptInterop.Functions.RefreshAuthenticationToken);
+
+                //since we don't want to force the CORS rules that JS Atomics requires, block the worker and poll until a token is given
+                while (string.IsNullOrWhiteSpace(this._refreshedToken))
+                {
+                    //by default, wait one second
+                    await WebWorkerUtilities.YieldAsync(WebWorkerConstants.Security.TokenRefresh.SpinWaitMilliseconds);
+                    ellapsedMilliseconds += WebWorkerConstants.Security.TokenRefresh.SpinWaitMilliseconds;
+
+                    //check timeout
+                    if (ellapsedMilliseconds >= timeout)
+                        break;
+                }
+
+                //check token
+                if (string.IsNullOrWhiteSpace(this._refreshedToken))
+                {
+                    //token refresh failed
+                    this._logger.LogError("Token refresh timed out.");
+                    logExcpetion(tokenException);
+
+                    //return
+                    return new InvocationRetryModel(null, false);
+                }
+                else
+                {
+                    try
+                    {
+                        //apply new token
+                        this._settingsService.Token.Secret = this._refreshedToken;
+
+                        //try invocation again
+                        this._logger.LogInformation("The token refresh was successful; reinvoking original method.");
+                        return new InvocationRetryModel(await invokeMethodAsync(), true);
+                    }
+                    catch (Exception finalException)
+                    {
+                        //generic error
+                        logExcpetion(finalException);
+                        throw;
+                    }
+                    finally
+                    {
+                        //clean up
+                        this._refreshedToken = null;
+                    }
+                }
+            }
+
+            try
+            {
+                //return
+                return await invokeMethodAsync();
+            }
+            catch (TokenExpiredException tokenException)
+            {
+                //token error - try again
+                InvocationRetryModel retryResult = await acquireRefreshedTokenAndRetryInvocationAsync(tokenException);
+                if (!retryResult.TokenRefreshed)
+                    throw;
+                else
+                    return retryResult.InvocationResult;
+            }
+            catch (HttpRequestException unauthroizedException) when (unauthroizedException.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                //http 401 error - try again
+                InvocationRetryModel retryResult = await acquireRefreshedTokenAndRetryInvocationAsync(unauthroizedException);
+                if (!retryResult.TokenRefreshed)
+                    throw;
+                else
+                    return retryResult.InvocationResult;
+            }
+            catch (Exception genericException)
+            {
+                //generic error
+                logExcpetion(genericException);
                 throw;
             }
             finally
             {
                 //unhook events
+                this._refreshedToken = null;
                 this._proxies.Remove(invocationId);
                 foreach (EventInfo eventRegistration in eventRegistrations.Keys)
                     eventRegistration.RemoveEventHandler(interfaceImplementation, eventRegistrations[eventRegistration]);
             }
-        }        
+        }
 
         /// <summary>
         /// This sets the autentication token after a web worker has been DI-ed.
@@ -250,8 +346,23 @@ namespace LinesOfCode.Web.Workers.Managers
                 throw new ArgumentNullException("The authentication token is required.");
 
             //return
-            ISettingsService settingsService = this._container.GetRequiredService<ISettingsService>();
-            settingsService.Token = token;
+            this._settingsService.Token = token;
+        }
+
+        /// <summary>
+        /// This refreshes the autentication token after a web worker has been DI-ed.
+        /// </summary>
+        [JSInvokable()]
+        public async Task RefreshAuthenticationTokenAsync(string token)
+        {
+            //initialization
+            await WebWorkerUtilities.YieldAsync();
+
+            //return
+            if (string.IsNullOrWhiteSpace(token))
+                this._logger.LogWarning("An empty refresh token was given.");
+            else
+                this._refreshedToken = token;
         }
         #endregion
         #region Private Methods
@@ -266,7 +377,8 @@ namespace LinesOfCode.Web.Workers.Managers
 
             //return
             ProxyModel proxy = this._proxies[invocationId];
-            await this._jsRuntime.InvokeVoidAsync(WebWorkerConstants.JavaScript.MarshalEvent, invocationId, proxy, eventName, eventArgumentTypeName, value);
+            IJSObjectReference module = await this.GetModuleAsync();
+            await module.InvokeVoidAsync(WebWorkerConstants.JavaScriptInterop.Functions.MarshalEvent, invocationId, proxy, eventName, eventArgumentTypeName, value);
         }
         #endregion
     }
