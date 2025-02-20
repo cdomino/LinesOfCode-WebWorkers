@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "MfvpnLvujGk=",
+  "dgSpecHash": "rD5x8NLKmAs=",
   "success": true,
-  "projectFilePath": "C:\\Code\\Public Repos\\LinesOfCode-WebWorkers\\LinesOfCode.Web.Workers.csproj",
+  "projectFilePath": "C:\\Code\\LinesOfCode\\LinesOfCode.Web.Workers\\LinesOfCode.Web.Workers.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\ChrisDomino\\.nuget\\packages\\blazored.sessionstorage\\2.4.0\\blazored.sessionstorage.2.4.0.nupkg.sha512",
     "C:\\Users\\ChrisDomino\\.nuget\\packages\\microsoft.aspnetcore.authorization\\9.0.2\\microsoft.aspnetcore.authorization.9.0.2.nupkg.sha512",

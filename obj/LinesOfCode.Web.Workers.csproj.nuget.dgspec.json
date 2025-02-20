@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Code\\Public Repos\\LinesOfCode-WebWorkers\\LinesOfCode.Web.Workers.csproj": {}
+    "C:\\Code\\LinesOfCode\\LinesOfCode.Web.Workers\\LinesOfCode.Web.Workers.csproj": {}
   },
   "projects": {
-    "C:\\Code\\Public Repos\\LinesOfCode-WebWorkers\\LinesOfCode.Web.Workers.csproj": {
-      "version": "2.1.0",
+    "C:\\Code\\LinesOfCode\\LinesOfCode.Web.Workers\\LinesOfCode.Web.Workers.csproj": {
+      "version": "2.1.1",
       "restore": {
-        "projectUniqueName": "C:\\Code\\Public Repos\\LinesOfCode-WebWorkers\\LinesOfCode.Web.Workers.csproj",
+        "projectUniqueName": "C:\\Code\\LinesOfCode\\LinesOfCode.Web.Workers\\LinesOfCode.Web.Workers.csproj",
         "projectName": "LinesOfCode.Web.Workers",
-        "projectPath": "C:\\Code\\Public Repos\\LinesOfCode-WebWorkers\\LinesOfCode.Web.Workers.csproj",
+        "projectPath": "C:\\Code\\LinesOfCode\\LinesOfCode.Web.Workers\\LinesOfCode.Web.Workers.csproj",
         "packagesPath": "C:\\Users\\ChrisDomino\\.nuget\\packages\\",
-        "outputPath": "C:\\Code\\Public Repos\\LinesOfCode-WebWorkers\\obj\\",
+        "outputPath": "C:\\Code\\LinesOfCode\\LinesOfCode.Web.Workers\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"

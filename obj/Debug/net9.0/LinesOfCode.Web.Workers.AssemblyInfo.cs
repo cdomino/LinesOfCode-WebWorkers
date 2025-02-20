@@ -16,11 +16,11 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyDescriptionAttribute("Remember when Blazor WASM was single threaded? Well you won\'t after installing th" +
     "is package! Use Blazor Web Workers to allow your UI to remain responsive while l" +
     "ong running operations, well, blaze on background JavaScript threads.")]
-[assembly: System.Reflection.AssemblyFileVersionAttribute("2.1.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("2.1.0+271353386b04ce7348e8f95e297a08b38bc38624")]
+[assembly: System.Reflection.AssemblyFileVersionAttribute("2.1.1.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("2.1.1+efffd6ac3a1e3453456717434c5f3bfaa0f7cb0f")]
 [assembly: System.Reflection.AssemblyProductAttribute("LinesOfCode.Web.Workers")]
 [assembly: System.Reflection.AssemblyTitleAttribute("LinesOfCode.Web.Workers")]
-[assembly: System.Reflection.AssemblyVersionAttribute("2.1.0.0")]
+[assembly: System.Reflection.AssemblyVersionAttribute("2.1.1.0")]
 [assembly: System.Reflection.AssemblyMetadataAttribute("RepositoryUrl", "https://github.com/cdomino/LinesOfCode-WebWorkers")]
 [assembly: System.Resources.NeutralResourcesLanguageAttribute("en-US")]
 

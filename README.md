@@ -38,7 +38,7 @@ The following steps walk you through how to get Blazor Web Workers installed and
         //other config stuff here
    
         //return
-        await builder.Build().RunDemoAsync();
+        await builder.Build().RunAsync();
     }
     ```
 
@@ -63,7 +63,7 @@ The following steps walk you through how to get Blazor Web Workers installed and
 	    //other config stuff here
    
         //return
-        await builder.Build().RunDemoAsync();
+        await builder.Build().RunAsync();
     }
     ```
 
@@ -181,7 +181,7 @@ namespace LinesOfCode.Web.Client
             //other config stuff here
 
             //return
-            await builder.Build().RunDemoAsync();
+            await builder.Build().RunAsync();
         }
         #endregion
     }
@@ -425,4 +425,5 @@ Wow that was *a lot* for a readme! As I said I'm really excited about this, and 
 - **v2.0.6**: Added demo site (see "Project URL" in the Nuget properties).
 - **v2.0.7**: Renamed "Mock" to "Demo" for the sample service so that the new `MockAuthenticationStateProvider` could be injected to fix certain anonymous issues. See the "Mock Dependencies" section above.
 - **v2.0.8** - **v2.0.10**: Bug fixes.
-- **v2.1.0** - Exposed `DependencyManager.GetJSRuntime` to allow components to access an instance `IJSInProcessRuntime` for JavaScript interop.
+- **v2.1.0** - Exposed `DependencyManager.GetJSRuntime` to allow components to access an instance of `IJSInProcessRuntime` for JavaScript interop.
+- **v2.1.1** - Documentation updates.
