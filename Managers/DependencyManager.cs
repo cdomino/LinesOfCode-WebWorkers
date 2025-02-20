@@ -33,19 +33,10 @@ namespace LinesOfCode.Web.Workers.Managers
         /// <summary>
         /// Registers web worker services for Blazor Web Apps.
         /// </summary>
-        public static void AddWebWorkers(this IHostApplicationBuilder builder, bool addMockAuthenticationDependencies = false, Action<WebWorkerSettingsModel> options = null)
-        {
-            //initialization
-            builder.Services.AddWebWorkers(builder.Configuration, (IConfigurationRoot)builder.Configuration, addMockAuthenticationDependencies, options);
-        }
-
-        /// <summary>
-        /// Registers web worker services for Blazor Web Apps.
-        /// </summary>
         public static void AddWebWorkers(this IHostApplicationBuilder builder, Action<WebWorkerSettingsModel> options = null)
         {
             //initialization
-            builder.Services.AddWebWorkers(builder.Configuration, (IConfigurationRoot)builder.Configuration, false, options);
+            builder.Services.AddWebWorkers(builder.Configuration, (IConfigurationRoot)builder.Configuration, options);
         }
 
         /// <summary>
@@ -54,17 +45,8 @@ namespace LinesOfCode.Web.Workers.Managers
         public static void AddWebWorkers(this IHostApplicationBuilder builder)
         {
             //initialization
-            builder.Services.AddWebWorkers(builder.Configuration, (IConfigurationRoot)builder.Configuration, false, null);
+            builder.Services.AddWebWorkers(builder.Configuration, (IConfigurationRoot)builder.Configuration, null);
         }
-
-        /// <summary>
-        /// Registers web worker services for Blazor WASM.
-        /// </summary>
-        public static void AddWebWorkers(this WebAssemblyHostBuilder builder, bool addMockAuthenticationDependencies = false, Action<WebWorkerSettingsModel> options = null)
-        {
-            //return
-            builder.Services.AddWebWorkers(builder.Configuration, builder.Configuration, addMockAuthenticationDependencies, options);
-        }      
 
         /// <summary>
         /// Registers web worker services for Blazor WASM.
@@ -72,7 +54,7 @@ namespace LinesOfCode.Web.Workers.Managers
         public static void AddWebWorkers(this WebAssemblyHostBuilder builder, Action<WebWorkerSettingsModel> options = null)
         {
             //return
-            builder.Services.AddWebWorkers(builder.Configuration, builder.Configuration, false, options);
+            builder.Services.AddWebWorkers(builder.Configuration, builder.Configuration, options);
         }
 
         /// <summary>
@@ -81,7 +63,7 @@ namespace LinesOfCode.Web.Workers.Managers
         public static void AddWebWorkers(this WebAssemblyHostBuilder builder)
         {
             //return
-            builder.Services.AddWebWorkers(builder.Configuration, builder.Configuration, false, null);
+            builder.Services.AddWebWorkers(builder.Configuration, builder.Configuration, null);
         }
 
         /// <summary>
@@ -130,12 +112,37 @@ namespace LinesOfCode.Web.Workers.Managers
             builder.Services.RegisterServices(builder.Configuration, settingsService);
             addWebWorkerDependencies?.Invoke(builder.Services, settingsService);
         }
+
+        /// <summary>
+        /// Uses reflection to construct an in-process JS runtime.
+        /// </summary>
+        public static IJSInProcessRuntime GetJSRuntime()
+        {
+            //initialization
+            string message = "The default WASM JSRuntime ";
+            Type jsRuntimeType = typeof(WebAssemblyHost).Assembly.GetType(WebWorkerConstants.Hosting.JSRuntime.TypeName);
+            if (jsRuntimeType == null)
+                throw new Exception($"{message} type {WebWorkerConstants.Hosting.JSRuntime.TypeName}could not be found.");
+
+            //get the field the holds the default JS runime
+            FieldInfo instanceField = jsRuntimeType.GetField(WebWorkerConstants.Hosting.JSRuntime.Instance, BindingFlags.Public | BindingFlags.Static);
+            if (instanceField == null)
+                throw new Exception($"{message} field {WebWorkerConstants.Hosting.JSRuntime.Instance}could not be found.");
+
+            //get instance object
+            IJSInProcessRuntime jsRuntime = (IJSInProcessRuntime)instanceField.GetValue(null);
+            if (jsRuntime == null)
+                throw new Exception($"{message}is null.");
+
+            //return
+            return jsRuntime;
+        }
         #endregion
         #region Private Methods
         /// <summary>
         /// Registers web worker services.
         /// </summary>
-        private static void AddWebWorkers(this IServiceCollection services, IConfigurationBuilder configurationBuilder, IConfigurationRoot configurationRoot, bool addMockDependencies, Action<WebWorkerSettingsModel> options = null)
+        private static void AddWebWorkers(this IServiceCollection services, IConfigurationBuilder configurationBuilder, IConfigurationRoot configurationRoot, Action<WebWorkerSettingsModel> options = null)
         {
             //initialization
             if (options != null)
@@ -162,13 +169,17 @@ namespace LinesOfCode.Web.Workers.Managers
 
                 //add settings
                 configurationBuilder.AddInMemoryCollection(allSettings);
+
+                //add mock dependencies
+                if (settings.UseMockNavigation)
+                    services.AddMockNavigation();
+                if (settings.UseMockAuthentication)
+                    services.AddMockAuthentication();
             }
 
             //return
             services.AddScoped<IWebWorkerManager, WebWorkerManager>();
-            services.RegisterServices(configurationRoot, new SettingsService(configurationRoot));
-            if (addMockDependencies)
-                services.AddMockDependencies();
+            services.RegisterServices(configurationRoot, new SettingsService(configurationRoot));           
         }
 
         /// <summary>
@@ -188,41 +199,26 @@ namespace LinesOfCode.Web.Workers.Managers
         /// <summary>
         /// Adds mock authentication and navigation services to satisify authentication dependencies.
         /// </summary>        
-        private static void AddMockDependencies(this IServiceCollection services)
+        private static void AddMockAuthentication(this IServiceCollection services)
         {
             //initialization
-            services.AddScoped<MockNavigationManager>();
             services.AddScoped<MockAuthenticationStateProvider>();
 
             //return
-            services.AddScoped<NavigationManager>(c => c.GetRequiredService<MockNavigationManager>());
             services.AddScoped<AuthenticationStateProvider>(c => c.GetRequiredService<MockAuthenticationStateProvider>());
         }
 
         /// <summary>
-        /// Uses reflection to construct an in-process JS runtime.
-        /// </summary>
-        private static IJSInProcessRuntime GetJSRuntime()
+        /// Adds mock authentication and navigation services to satisify authentication dependencies.
+        /// </summary>        
+        private static void AddMockNavigation(this IServiceCollection services)
         {
             //initialization
-            string message = "The default WASM JSRuntime ";
-            Type jsRuntimeType = typeof(WebAssemblyHost).Assembly.GetType(WebWorkerConstants.Hosting.JSRuntime.TypeName);
-            if (jsRuntimeType == null)
-                throw new Exception($"{message} type {WebWorkerConstants.Hosting.JSRuntime.TypeName}could not be found.");
-
-            //get the field the holds the default JS runime
-            FieldInfo instanceField = jsRuntimeType.GetField(WebWorkerConstants.Hosting.JSRuntime.Instance, BindingFlags.Public | BindingFlags.Static);
-            if (instanceField == null)
-                throw new Exception($"{message} field {WebWorkerConstants.Hosting.JSRuntime.Instance}could not be found.");
-
-            //get instance object
-            IJSInProcessRuntime jsRuntime = (IJSInProcessRuntime)instanceField.GetValue(null);
-            if (jsRuntime == null)
-                throw new Exception($"{message}is null.");
+            services.AddScoped<MockNavigationManager>();
 
             //return
-            return jsRuntime;
-        }
+            services.AddScoped<NavigationManager>(c => c.GetRequiredService<MockNavigationManager>());
+        }      
 
         /// <summary>
         /// Configures HTTP clients.

@@ -10,9 +10,11 @@
         }
         #endregion
         #region Properties
+        public bool UseMockNavigation { get; set; }
+        public bool UseMockAuthentication { get; set; }
         public AzureB2CSettingsModel AzureB2CSettings { get; set; }
         #endregion
-        #region Initialization
+        #region Public Methods
         public override string ToString()
         {
             //return

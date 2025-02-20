@@ -38,7 +38,7 @@ The following steps walk you through how to get Blazor Web Workers installed and
         //other config stuff here
    
         //return
-        await builder.Build().RunAsync();
+        await builder.Build().RunDemoAsync();
     }
     ```
 
@@ -63,7 +63,7 @@ The following steps walk you through how to get Blazor Web Workers installed and
 	    //other config stuff here
    
         //return
-        await builder.Build().RunAsync();
+        await builder.Build().RunDemoAsync();
     }
     ```
 
@@ -181,7 +181,7 @@ namespace LinesOfCode.Web.Client
             //other config stuff here
 
             //return
-            await builder.Build().RunAsync();
+            await builder.Build().RunDemoAsync();
         }
         #endregion
     }
@@ -272,7 +272,7 @@ protected async Task CreateWorkerAsync()
 }
 ```
 
-Now let's run some code (the `RunAsync` method on `DemoService` is my example function - again, you can proxy *any* method on *any* service without compromising any of Visual Studio's code search/refactoring functionality) on our new thread upon the other button click.
+Now let's run some code (the `RunDemoAsync` method on `DemoService` is my example function - again, you can proxy *any* method on *any* service without compromising any of Visual Studio's code search/refactoring functionality) on our new thread upon the other button click.
 
 ```
 /// <summary>
@@ -285,14 +285,14 @@ protected async Task RunWorkerAsync()
 
     //create a proxy
     IDemoLongRunningService proxiedDemoService = await this._webWorkerManager.GetProxyImplementationAsync<IDemoLongRunningService>(this._selectedWorker.Id);
-    Guid invocationId = this._webWorkerManager.RegisterMethodInvocationCallbacks<IDemoLongRunningService, string>(proxiedDemoService, nameof(this._demoService.RunAsync), this.WorkerCompletedAsync, this.WorkerFailedAsync);
+    Guid invocationId = this._webWorkerManager.RegisterMethodInvocationCallbacks<IDemoLongRunningService, string>(proxiedDemoService, nameof(this._demoService.RunDemoAsync), this.WorkerCompletedAsync, this.WorkerFailedAsync);
 
     //handle events
     if (this._registerEvents)
         this._webWorkerManager.RegisterEventCallback<IDemoLongRunningService, DemoEventData>(proxiedDemoService, invocationId, nameof(this._demoService.DemoEvent), this.WorkerProgressedAsync);
           
     //return
-    await proxiedDemoService.RunAsync(this._simulationSeconds);   
+    await proxiedDemoService.RunDemoAsync(this._simulationSeconds);   
 }
 ```
 
@@ -359,15 +359,40 @@ Here's what's going on above:
  
  5. All that's left to do is execute your method! Notice that it's just like calling a normal function on a normal object; no orchestrators or wrappers are needed. As I've said, the only paradigmatic difference is that result doesn't come inline; it's sent to an event handler instead to really drive home how much your long running operation isn't blocking the UI!
  
-     `await proxiedDemoService.RunAsync(this._simulationSeconds);`
+     `await proxiedDemoService.RunDemoAsync(this._simulationSeconds);`
 
-## New in 2.0 - Formal File Upload Support
+## New in 2.0
+
+### Formal File Upload Support
 
 A really cool use case is processing large/simultaneous image uploads in Blazor Web Workers. As long as you never actually touch the bytes in your .NET code and do it all with the crazy native JavaScript memory array APIs (with a little help from Azure Storage's [progressive upload API](https://learn.microsoft.com/en-us/dotnet/api/azure.storage.blobs.specialized.blockblobclient.stageblockasync?view=azure-dotnet)) you can upload large images really quickly WITH accurate real-time progress bars.
 
 The way this works is by using an overload of `IWebWorkerManager.GetProxyImplementationAsync` that accepts a second parameter of type `string` which is the `id` of an HTML file input control (or `InputFile` if you're using Blazor's HTML wrappers). If this is set, then invoking a method on your proxied service will include the "raw" native files sitting in the HTML control as additional transferrable objects that are sent to the Web Worker thread. As I mentioned above, what slows down the perceived performance in conventional Blazor usage is accessing an uploaded HTML file’s byte array via `IBrowserFile.OpenReadStream` from your .NET code running on the UI thread. This is especially true for very large (>10MB) files. By moving all I/O functionality to asynchronous JavaScript in a Web Worker thread leveraging `FileReader`, you never have to take a UI-blocking perf hit. 
 
 Again, the details of this implementation are outside the scope of this readme, so I created a [quick demo app](https://blazor-web-workers.azurewebsites.net) to showcase this and other usage scenarios for Blazor Web Workers. 
+
+### Mock Dependencies
+
+With the interactive render modes added back in .NET 8, we have a lot more control over the dynamicism of our Blazor apps. Depending on your set up, .NET code can be running server-side, client-side, or both. Furthermore, you may or may not be using authentication; you may or may not be even running in a web context (e.g. perhaps you need to register your Web Workers in a middleware project that would be referenced in both web apps and web jobs). To enable as many scenarios as possible, the second release of Blazor Web Workers adds a few more options to `WebWorkerSettingsModel`:
+
+- `UseMockAuthentication`: set this to `true` if your app is anonymous; otherwise you might get this love note from Blazor (since Web Workers takes a dependency on `AuthenticationStateProvider`): **Unhandled exception rendering component: Unable to resolve service for type 'Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider' while attempting to activate 'LinesOfCode.Web.Workers.Managers.WebWorkerManager'. System.InvalidOperationException: Unable to resolve service for type 'Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider' while attempting to activate 'LinesOfCode.Web.Workers.Managers.WebWorkerManager'.**.
+- `UseMockNavigation`: another example of a non-web context is if you're using Blazor to render emails that are sent out as part of a nightly job in an Azure Function. You can still use Blazor in these scenarios, but it requires ensuring its interal dependencies are resolved. Setting this option to `true` injects a mocked implementation of `NavigationManager` so that your DI container can still resolve Razor components without the full web context.
+
+Here's an example that sets both of these flags; depending on your setup, this might in either the server and/or client's `Program.cs`:
+
+```
+...
+
+//add web worker services
+builder.AddWebWorkers((options) =>
+{
+    //ready for anything!
+    options.UseMockNavigation = true;
+    options.UseMockAuthentication = true;
+});
+
+...
+```
 
 ## Final Thoughts
 
@@ -398,5 +423,6 @@ Wow that was *a lot* for a readme! As I said I'm really excited about this, and 
 - **v2.0.1** - **v2.0.4**: Beta testing.
 - **v2.0.5**: 2.0 realease.
 - **v2.0.6**: Added demo site (see "Project URL" in the Nuget properties).
-- **v2.0.7**: Renamed "Mock" to "Demo" for the sample service so that the new `MockAuthenticationStateProvider` could be injected to fix certain anonymous issues. If you need to leverage this, use the following DI override in your server project's `Program.cs` where `true` is the first parameter: `builder.AddWebWorkers(true, (options) => { ... });`
-- **v2.0.8** - **v2.0.9**: Bug fixes.
+- **v2.0.7**: Renamed "Mock" to "Demo" for the sample service so that the new `MockAuthenticationStateProvider` could be injected to fix certain anonymous issues. See the "Mock Dependencies" section above.
+- **v2.0.8** - **v2.0.10**: Bug fixes.
+- **v2.1.0** - Exposed `DependencyManager.GetJSRuntime` to allow components to access an instance `IJSInProcessRuntime` for JavaScript interop.

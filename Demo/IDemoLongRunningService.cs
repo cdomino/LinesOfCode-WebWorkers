@@ -6,10 +6,10 @@ namespace LinesOfCode.Web.Workers.Demo
     public interface IDemoLongRunningService
     {
         #region Events
-        public event EventHandler<DemoEventData> MockEvent;
+        public event EventHandler<DemoEventData> DemoEvent;
         #endregion
         #region Methods
-        Task<string> RunAsync(int? simulationSeconds);
+        Task<string> RunDemoAsync(int? simulationSeconds);
         #endregion
     }
 }

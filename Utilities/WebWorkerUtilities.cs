@@ -266,7 +266,7 @@ namespace LinesOfCode.Web.Workers.Utilities
                 return "N/A";
 
             //return
-            return dictionary.Select(d => $"{d.Key}{WebWorkerConstants.Delimiters.Variable}{d.Value}").ToSeparatedList(WebWorkerConstants.Delimiters.DatasetDelimiter.ToString());
+            return dictionary.Select(d => $"{d.Key}{WebWorkerConstants.Delimiters.Variable}{d.Value}").ToSeparatedList(WebWorkerConstants.Delimiters.Dataset.ToString());
         }
 
         /// <summary>

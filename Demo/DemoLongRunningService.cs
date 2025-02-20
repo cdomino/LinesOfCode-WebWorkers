@@ -17,7 +17,7 @@ namespace LinesOfCode.Web.Workers.Demo
         private readonly ILogger<DemoLongRunningService> _logger;
         #endregion
         #region Events
-        public event EventHandler<DemoEventData> MockEvent;
+        public event EventHandler<DemoEventData> DemoEvent;
         #endregion
         #region Initialization
         public DemoLongRunningService(ILogger<DemoLongRunningService> logger)
@@ -30,7 +30,7 @@ namespace LinesOfCode.Web.Workers.Demo
         /// <summary>
         /// Simulates a long running operation. Pass null to simulate an error.
         /// </summary>
-        public async Task<string> RunAsync(int? simulationSeconds)
+        public async Task<string> RunDemoAsync(int? simulationSeconds)
         {
             //initialization
             if (!simulationSeconds.HasValue)
@@ -49,12 +49,12 @@ namespace LinesOfCode.Web.Workers.Demo
             for (int second = 1; second < simulationSeconds; second++)
             {
                 //raise event every second
-                this.MockEvent?.Invoke(this, new DemoEventData(stopWatch.Elapsed.TotalSeconds));
+                this.DemoEvent?.Invoke(this, new DemoEventData(stopWatch.Elapsed.TotalSeconds));
                 await Task.Delay(1000);
             }
 
             //return
-            string result = $"Simulated mock service call for {simulationSeconds.Value.Pluralize("second")}.";
+            string result = $"Simulated demo service call for {simulationSeconds.Value.Pluralize("second")}.";
             this._logger.LogInformation(result);
             return result;
         }

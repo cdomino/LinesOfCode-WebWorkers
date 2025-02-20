@@ -59,8 +59,8 @@
         public class Delimiters
         {
             public const char Record = '^';
+            public const char Dataset = '!';
             public const char Variable = '~';
-            public const char DatasetDelimiter = '!';
         }
         public class Compression
         {
