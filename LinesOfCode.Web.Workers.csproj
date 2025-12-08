@@ -1,6 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Razor">
 	<PropertyGroup>
-		<Version>2.1.1</Version>
+		<Version>2.2</Version>
 		<Nullable>disable</Nullable>
 		<Authors>Chris Domino</Authors>
 		<Company>Lines Of Code</Company>
@@ -8,11 +8,10 @@
 		<RepositoryType>git</RepositoryType>
 		<NeutralLanguage>en-US</NeutralLanguage>
 		<ImplicitUsings>disable</ImplicitUsings>
-		<TargetFramework>net9.0</TargetFramework>
+		<TargetFramework>net10.0</TargetFramework>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 		<PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
-		<PackageReadmeFile>LinesOfCode.Web.Workers.ReadMe.md</PackageReadmeFile>
 		<RepositoryUrl>https://github.com/cdomino/LinesOfCode-WebWorkers</RepositoryUrl>
 		<PackageProjectUrl>https://blazor-web-workers.azurewebsites.net</PackageProjectUrl>
 		<PackageTags>Blazor; WASM; Web Worker; WebWorker; Web Workers; WebWorkers</PackageTags>
@@ -20,22 +19,22 @@
 		<Description>Remember when Blazor WASM was single threaded? Well you won't after installing this package! Use Blazor Web Workers to allow your UI to remain responsive while long running operations, well, blaze on background JavaScript threads.</Description>
 	</PropertyGroup>
 	<ItemGroup>
-		<None Include="..\LinesOfCode.Web.Workers.ReadMe.md">
+		<SupportedPlatform Include="browser" />
+	</ItemGroup>
+	<ItemGroup>
+		<None Update="README.md">
 			<Pack>True</Pack>
 			<PackagePath>\</PackagePath>
 		</None>
 	</ItemGroup>
 	<ItemGroup>
-		<SupportedPlatform Include="browser" />
-	</ItemGroup>
-	<ItemGroup>
 		<PackageReference Include="Blazored.SessionStorage" Version="2.4.0" />
-		<PackageReference Include="Microsoft.Extensions.Http" Version="9.0.2" />
-		<PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.2" />
-		<PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="9.0.2" />
-		<PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="9.0.2" />
-		<PackageReference Include="Microsoft.AspNetCore.Components.Authorization" Version="9.0.2" />
-		<PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="9.0.2" />
-		<PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="9.0.2" />
+		<PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0" />
+		<PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
+		<PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="10.0.0" />
+		<PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.0" />
+		<PackageReference Include="Microsoft.AspNetCore.Components.Authorization" Version="10.0.0" />
+		<PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.0" />
+		<PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.0" />
 	</ItemGroup>
 </Project>

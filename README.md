@@ -427,3 +427,4 @@ Wow that was *a lot* for a readme! As I said I'm really excited about this, and 
 - **v2.0.8** - **v2.0.10**: Bug fixes.
 - **v2.1.0** - Exposed `DependencyManager.GetJSRuntime` to allow components to access an instance of `IJSInProcessRuntime` for JavaScript interop.
 - **v2.1.1** - Documentation updates.
+- **v2.2.0** - Upgraded to .NET 10. When coupled with Visual Studio 2026, I have encountered issues with the WASM debugger. If you're in this boat as well, search for "mono" in the VS settings and disable all preview features. Running without debugging (Ctrl + F5) also helped.
