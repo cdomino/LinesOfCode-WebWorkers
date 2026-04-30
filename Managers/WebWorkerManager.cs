@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Reflection.Emit;
 using System.Threading.Tasks;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 
 using Microsoft.JSInterop;
 using Microsoft.Extensions.Logging;
@@ -35,11 +36,11 @@ namespace LinesOfCode.Web.Workers.Managers
         private readonly ISessionStorageService _sessionStorageService; 
         private readonly IMemoryCacheManager<string, MethodInfo> _handlerCache;
         private readonly AuthenticationStateProvider _authenticationStateProvider;
-        private readonly Dictionary<Guid, List<Func<Guid, Task>>> _creationCallbacks;
-        private readonly Dictionary<string, Dictionary<string, Type>> _proxyReturnTypes;
-        private readonly Dictionary<Guid, Dictionary<string, object>> _proxyEventCallbacks;
-        private readonly Dictionary<string, Dictionary<string, object>> _proxySuccessCallbacks;
-        private readonly Dictionary<string, Dictionary<string, Func<ErrorMessageModel, Task>>> _proxyErrorCallbacks;
+        private readonly ConcurrentDictionary<Guid, List<Func<Guid, Task>>> _creationCallbacks;
+        private readonly ConcurrentDictionary<string, Dictionary<string, Type>> _proxyReturnTypes;
+        private readonly ConcurrentDictionary<Guid, Dictionary<string, object>> _proxyEventCallbacks;
+        private readonly ConcurrentDictionary<string, Dictionary<string, object>> _proxySuccessCallbacks;
+        private readonly ConcurrentDictionary<string, Dictionary<string, Func<ErrorMessageModel, Task>>> _proxyErrorCallbacks;
         #endregion
         #region Initialization
         public WebWorkerManager(IJSRuntime jsRuntime,
@@ -53,11 +54,11 @@ namespace LinesOfCode.Web.Workers.Managers
         {
             //initialization
             this._webWorkerIds = new List<Guid>();
-            this._creationCallbacks = new Dictionary<Guid, List<Func<Guid, Task>>>();
-            this._proxyReturnTypes = new Dictionary<string, Dictionary<string, Type>>();
-            this._proxyEventCallbacks = new Dictionary<Guid, Dictionary<string, object>>();
-            this._proxySuccessCallbacks = new Dictionary<string, Dictionary<string, object>>();
-            this._proxyErrorCallbacks = new Dictionary<string, Dictionary<string, Func<ErrorMessageModel, Task>>>();
+            this._creationCallbacks = new ConcurrentDictionary<Guid, List<Func<Guid, Task>>>();
+            this._proxyReturnTypes = new ConcurrentDictionary<string, Dictionary<string, Type>>();
+            this._proxyEventCallbacks = new ConcurrentDictionary<Guid, Dictionary<string, object>>();
+            this._proxySuccessCallbacks = new ConcurrentDictionary<string, Dictionary<string, object>>();
+            this._proxyErrorCallbacks = new ConcurrentDictionary<string, Dictionary<string, Func<ErrorMessageModel, Task>>>();
 
             //ensure dependencies
             this._logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -185,7 +186,7 @@ namespace LinesOfCode.Web.Workers.Managers
 
             //return
             await module.InvokeVoidAsync(WebWorkerConstants.JavaScriptInterop.Functions.TerminateWebWorker, workerId);
-            this._creationCallbacks.Remove(workerId);
+            this._creationCallbacks.Remove(workerId, out _);
             this._webWorkerIds.Remove(workerId);
         }
 
@@ -709,7 +710,7 @@ namespace LinesOfCode.Web.Workers.Managers
                 throw error;
 
             //return
-            this._creationCallbacks.Remove(workerId);
+            this._creationCallbacks.Remove(workerId, out _);
         }
 
         /// <summary>
@@ -922,7 +923,7 @@ namespace LinesOfCode.Web.Workers.Managers
         /// <summary>
         /// Extracts and invokes a proxy callback.
         /// </summary>
-        private T GetProxyCallback<T>(BaseMessageModel model, Dictionary<string, Dictionary<string, T>> callbacks, string callbackType)
+        private T GetProxyCallback<T>(BaseMessageModel model, ConcurrentDictionary<string, Dictionary<string, T>> callbacks, string callbackType)
         {
             //initialization
             if (model == null)
