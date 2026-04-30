@@ -693,7 +693,7 @@ namespace LinesOfCode.Web.Workers.Managers
             //initialization
             this._webWorkerIds.Add(workerId);
             List<Task> tasks = new List<Task>();
-            this._logger.LogDebug($"Created and web worker {workerId}.");
+            this._logger.LogInformation($"Created web worker {workerId}.");
 
             //check worker callbacks
             if (!this._creationCallbacks.ContainsKey(workerId))
