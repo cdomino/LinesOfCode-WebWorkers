@@ -804,7 +804,7 @@ namespace LinesOfCode.Web.Workers.Managers
             foreach (string key in keys)
             {
                 //loosely check for the one with token metadata, as MSAL can change it's format for token keys
-                if (key.Contains(WebWorkerConstants.Security.AccessToken, StringComparison.InvariantCultureIgnoreCase))              
+                if (key.Contains(WebWorkerConstants.Security.AccessToken, StringComparison.InvariantCultureIgnoreCase) && key.Contains(currentUserId.ToString(), StringComparison.InvariantCultureIgnoreCase))
                 {
                     //check each candidate key
                     AzureB2CTokenModel token = await this._sessionStorageService.GetItemAsync<AzureB2CTokenModel>(key);
