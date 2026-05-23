@@ -427,3 +427,4 @@ Wow that was *a lot* for a readme! As I said I'm really excited about this, and 
 - **v2.1.1** - Documentation updates.
 - **v2.2.0** - Upgraded to .NET 10. When coupled with Visual Studio 2026, I have encountered issues with the WASM debugger. If you're in this boat as well, search for "mono" in the VS settings and disable all preview features. Running without debugging (Ctrl + F5) also helped.
 - **v2.4.0** - Fixed an issue to address MSAL renaming the access token key in local storage.
+- **v2.5.0** - Changed the Blazor browser storage NuGet package to [this one](https://github.com/mmsoftpl/Blazor.Storage) to remove vulnerabilities. If you get build errors after upgrading, remove any existing NuGet packages mentioned in the preceeding link.
