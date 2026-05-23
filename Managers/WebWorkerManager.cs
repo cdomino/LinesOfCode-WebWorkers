@@ -804,17 +804,27 @@ namespace LinesOfCode.Web.Workers.Managers
             string instance = this._settingsService.GetSetting<string>(WebWorkerConstants.Security.Settings.Instance);
             Guid currentUserId = Guid.Parse(state.User.GetClaimValueWithFallback(WebWorkerConstants.Security.Claims.OID, WebWorkerConstants.Security.Claims.ID));
 
-            //get token
-            string[] keys = WebWorkerUtilities.BuildAzureB2CTokenSessionKeys(currentUserId, policy, tenantId, instance, appId, scope);
+            //get session storage keys
+            IEnumerable<string> keys = await this._sessionStorageService.KeysAsync();
             foreach (string key in keys)
             {
-                //check each known key
-                AzureB2CTokenModel token = await this._sessionStorageService.GetItemAsync<AzureB2CTokenModel>(key);
-                if (token != null)
+                //loosely check for the one with token metadata, as MSAL can change it's format for token keys
+                if (key.Contains(WebWorkerConstants.Security.AccessToken, StringComparison.InvariantCultureIgnoreCase)
+                && key.Contains(currentUserId.ToString(), StringComparison.InvariantCultureIgnoreCase) 
+                && key.Contains(tenantId.ToString(), StringComparison.InvariantCultureIgnoreCase) 
+                && key.Contains(appId.ToString(), StringComparison.InvariantCultureIgnoreCase)
+                && key.Contains(instance, StringComparison.InvariantCultureIgnoreCase)
+                && key.Contains(policy, StringComparison.InvariantCultureIgnoreCase)
+                && key.Contains(scope, StringComparison.InvariantCultureIgnoreCase))
                 {
-                    //return
-                    this._logger.LogInformation($"Found Azure B2C token at {key}.");
-                    return token;
+                    //check each candidate key
+                    AzureB2CTokenModel token = await this._sessionStorageService.GetItemAsync<AzureB2CTokenModel>(key);
+                    if (token != null)
+                    {
+                        //return
+                        this._logger.LogInformation($"Found Azure B2C token at {key}.");
+                        return token;
+                    }
                 }
             }
 
