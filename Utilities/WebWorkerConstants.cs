@@ -85,7 +85,8 @@
         }
         public class Security
         {
-            public const string B2CTokenSessionKeyFormat = "{0}-{1}.{2}-{3}-accesstoken-{4}--{5}--";
+            public const string B2CTokenSessionKeyFormatDashes = "{0}-{1}.{2}-{3}-accesstoken-{4}--{5}--";
+            public const string B2CTokenSessionKeyFormatPipes = "msal.2|{0}-{1}.{2}-{3}|accesstoken|{4}|{5}||";
             public class Claims
             {
                 public const string OID = "oid";

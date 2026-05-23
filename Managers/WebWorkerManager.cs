@@ -805,18 +805,22 @@ namespace LinesOfCode.Web.Workers.Managers
             Guid currentUserId = Guid.Parse(state.User.GetClaimValueWithFallback(WebWorkerConstants.Security.Claims.OID, WebWorkerConstants.Security.Claims.ID));
 
             //get token
-            string key = WebWorkerUtilities.BuildAzureB2CTokenSessionKey(currentUserId, policy, tenantId, instance, appId, scope);
-            AzureB2CTokenModel token = await this._sessionStorageService.GetItemAsync<AzureB2CTokenModel>(key);
+            string[] keys = WebWorkerUtilities.BuildAzureB2CTokenSessionKeys(currentUserId, policy, tenantId, instance, appId, scope);
+            foreach (string key in keys)
+            {
+                //check each known key
+                AzureB2CTokenModel token = await this._sessionStorageService.GetItemAsync<AzureB2CTokenModel>(key);
+                if (token != null)
+                {
+                    //return
+                    this._logger.LogInformation($"Found Azure B2C token at {key}.");
+                    return token;
+                }
+            }
 
-            //log
-            string message = $" Azure B2C token at {key}.";
-            if (token != null)
-                this._logger.LogInformation($"Found{message}");
-            else
-                this._logger.LogError($"Could not find{message}");
-
-            //return
-            return token;
+            //not found
+            this._logger.LogError($"Could not find Azure B2C token among {keys.ToSeparatedList()}.");
+            return null;
         }
         
         /// <summary>

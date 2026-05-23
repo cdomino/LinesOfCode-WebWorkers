@@ -75,14 +75,18 @@ namespace LinesOfCode.Web.Workers.Utilities
         /// <summary>
         /// Builds a key to get an Azure B2C token from browser session storage.
         /// </summary>
-        public static string BuildAzureB2CTokenSessionKey(Guid userId, string policy, Guid tenantId, string instance, Guid appId, string scope)
+        public static string[] BuildAzureB2CTokenSessionKeys(Guid userId, string policy, Guid tenantId, string instance, Guid appId, string scope)
         {
             //initialization
             if (Uri.TryCreate(instance, UriKind.Absolute, out Uri uri))
                 instance = uri.DnsSafeHost;
 
             //return
-            return string.Format(WebWorkerConstants.Security.B2CTokenSessionKeyFormat, userId, policy, tenantId, instance, appId, scope).ToLowerInvariant();
+            return new string[]
+            {
+                string.Format(WebWorkerConstants.Security.B2CTokenSessionKeyFormatPipes, userId, policy, tenantId, instance, appId, scope).ToLowerInvariant(),
+                string.Format(WebWorkerConstants.Security.B2CTokenSessionKeyFormatDashes, userId, policy, tenantId, instance, appId, scope).ToLowerInvariant()
+            };
         }
         #endregion
         #region Serialization
