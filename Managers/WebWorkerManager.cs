@@ -797,25 +797,14 @@ namespace LinesOfCode.Web.Workers.Managers
             }
 
             //get b2c settings
-            Guid appId = this._settingsService.GetSetting<Guid>(WebWorkerConstants.Security.Settings.AppId);
-            Guid tenantId = this._settingsService.GetSetting<Guid>(WebWorkerConstants.Security.Settings.TenantId);
-            string policy = this._settingsService.GetSetting<string>(WebWorkerConstants.Security.Settings.Policy);
-            string scope = this._settingsService.GetSetting<string>(WebWorkerConstants.Security.Settings.AccessScope);
-            string instance = this._settingsService.GetSetting<string>(WebWorkerConstants.Security.Settings.Instance);
+            IEnumerable<string> keys = await this._sessionStorageService.KeysAsync();
             Guid currentUserId = Guid.Parse(state.User.GetClaimValueWithFallback(WebWorkerConstants.Security.Claims.OID, WebWorkerConstants.Security.Claims.ID));
 
             //get session storage keys
-            IEnumerable<string> keys = await this._sessionStorageService.KeysAsync();
             foreach (string key in keys)
             {
                 //loosely check for the one with token metadata, as MSAL can change it's format for token keys
-                if (key.Contains(WebWorkerConstants.Security.AccessToken, StringComparison.InvariantCultureIgnoreCase)
-                && key.Contains(currentUserId.ToString(), StringComparison.InvariantCultureIgnoreCase) 
-                && key.Contains(tenantId.ToString(), StringComparison.InvariantCultureIgnoreCase) 
-                && key.Contains(appId.ToString(), StringComparison.InvariantCultureIgnoreCase)
-                && key.Contains(instance, StringComparison.InvariantCultureIgnoreCase)
-                && key.Contains(policy, StringComparison.InvariantCultureIgnoreCase)
-                && key.Contains(scope, StringComparison.InvariantCultureIgnoreCase))
+                if (key.Contains(WebWorkerConstants.Security.AccessToken, StringComparison.InvariantCultureIgnoreCase))              
                 {
                     //check each candidate key
                     AzureB2CTokenModel token = await this._sessionStorageService.GetItemAsync<AzureB2CTokenModel>(key);
