@@ -1,6 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Razor">
 	<PropertyGroup>
-		<Version>2.2.12-beta</Version>
+		<Version>2.4.0</Version>
 		<Nullable>disable</Nullable>
 		<Authors>Chris Domino</Authors>
 		<Company>Lines Of Code</Company>
@@ -29,7 +29,7 @@
 		</None>
 	</ItemGroup>
 	<ItemGroup>
-		<PackageReference Include="Blazored.SessionStorage" Version="2.4.0" />
+		<PackageReference Include="Blazor.Storage" Version="5.0.0" />
 		<PackageReference Include="Microsoft.Extensions.Http" Version="10.0.8" />
 		<PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.8" />
 		<PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="10.0.8" />

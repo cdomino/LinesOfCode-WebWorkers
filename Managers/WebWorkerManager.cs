@@ -797,14 +797,19 @@ namespace LinesOfCode.Web.Workers.Managers
             }
 
             //get b2c settings
-            IEnumerable<string> keys = await this._sessionStorageService.KeysAsync();
+            Guid appId = this._settingsService.GetSetting<Guid>(WebWorkerConstants.Security.Settings.AppId);
+            Guid tenantId = this._settingsService.GetSetting<Guid>(WebWorkerConstants.Security.Settings.TenantId);            
             Guid currentUserId = Guid.Parse(state.User.GetClaimValueWithFallback(WebWorkerConstants.Security.Claims.OID, WebWorkerConstants.Security.Claims.ID));
 
             //get session storage keys
+            IEnumerable<string> keys = await this._sessionStorageService.KeysAsync();
             foreach (string key in keys)
             {
-                //loosely check for the one with token metadata, as MSAL can change it's format for token keys
-                if (key.Contains(WebWorkerConstants.Security.AccessToken, StringComparison.InvariantCultureIgnoreCase) && key.Contains(currentUserId.ToString(), StringComparison.InvariantCultureIgnoreCase))
+                //loosely check for the one with token metadata specific o this user, app, and tenant; MSAL can change it's format for token keys
+                if (key.Contains(WebWorkerConstants.Security.AccessToken, StringComparison.InvariantCultureIgnoreCase) 
+                && key.Contains(currentUserId.ToString(), StringComparison.InvariantCultureIgnoreCase)
+                && key.Contains(tenantId.ToString(), StringComparison.InvariantCultureIgnoreCase)
+                && key.Contains(appId.ToString(), StringComparison.InvariantCultureIgnoreCase))
                 {
                     //check each candidate key
                     AzureB2CTokenModel token = await this._sessionStorageService.GetItemAsync<AzureB2CTokenModel>(key);
