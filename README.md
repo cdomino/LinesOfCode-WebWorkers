@@ -413,18 +413,18 @@ Wow that was *a lot* for a readme! As I said I'm really excited about this, and 
 
 ## Changelog
 
-- **v1.0.0** - **v1.0.3**: Beta testing.
+(Any missing versions are just minor bug fixes.)
+
 - **v1.0.4**: Initial realease.
-- **v1.0.5** - **v1.0.8**: Bug fixes.
 - **v1.1.0**: Added support for Azure B2C token refresh, which should happen silently behind the scenes. Authenticated Blazor Web Workers will catch any 401s and wait until a new token is sent. You can optionally set `WebWorkerSettingsModel.AzureB2CSettings.TokenRefreshTimeoutMilliseconds` in your startup code to control how long the web worker will block itself until a new access token is acquired from the main thread (assuming your Azure B2C + MSAL configuration supports token refresh). This defaults to five seconds, but this lets you increase it in case you need to do additional work to acquire the token. Finally, the `WebWorkerManager` will look for it in session storage and send it back to worker, who will then retry the failed 401 request one more time.
 - **v2.0.0**: Upgraded to .NET 9, converted all (possible) JavaScript to use modules, and formalized file upload support.
     - *Breaking change*: `IWebWorkerManager.GetProxyImplementation` had to be async-ifed to `IWebWorkerManager.GetProxyImplementationAsync` so hopefully the fix is just a matter of sprinkling more `await` refactorings in your web worker manager code.
     - *Breaking change*: you'll need to remove any Web Worker script tags from `App.razor` (or other Blazor hosting HTML files) that were required in previous versions; moving the JavaScript to modules made this unnecessary.
-- **v2.0.1** - **v2.0.4**: Beta testing.
 - **v2.0.5**: 2.0 realease.
 - **v2.0.6**: Added demo site (see "Project URL" in the Nuget properties).
 - **v2.0.7**: Renamed "Mock" to "Demo" for the sample service so that the new `MockAuthenticationStateProvider` could be injected to fix certain anonymous issues. See the "Mock Dependencies" section above.
-- **v2.0.8** - **v2.0.10**: Bug fixes.
 - **v2.1.0** - Exposed `DependencyManager.GetJSRuntime` to allow components to access an instance of `IJSInProcessRuntime` for JavaScript interop.
 - **v2.1.1** - Documentation updates.
 - **v2.2.0** - Upgraded to .NET 10. When coupled with Visual Studio 2026, I have encountered issues with the WASM debugger. If you're in this boat as well, search for "mono" in the VS settings and disable all preview features. Running without debugging (Ctrl + F5) also helped.
+- **v2.4.0** - Fixed an issue to address MSAL renaming the access token key in local storage.
+- **v2.5.0** - Changed the Blazor browser storage NuGet package to [this one](https://github.com/mmsoftpl/Blazor.Storage) to remove vulnerabilities. If you get build errors after upgrading, remove any existing NuGet packages mentioned in the preceeding link.

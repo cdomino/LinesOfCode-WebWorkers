@@ -1,14 +1,12 @@
-﻿using System;
-
-namespace LinesOfCode.Web.Workers.Models
+﻿namespace LinesOfCode.Web.Workers.Models
 {
     public class AzureB2CTokenModel
     {
         #region Properties
         public string Realm { get; set; }
         public string Secret { get; set; }
-        public Guid ClientId { get; set; }
         public string Target { get; set; }
+        public string ClientId { get; set; }
         public string CachedAt { get; set; }
         public string ExpiresOn { get; set; }
         public string TokenType { get; set; }

@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Reflection.Emit;
 using System.Threading.Tasks;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 
 using Microsoft.JSInterop;
 using Microsoft.Extensions.Logging;
@@ -35,11 +36,11 @@ namespace LinesOfCode.Web.Workers.Managers
         private readonly ISessionStorageService _sessionStorageService; 
         private readonly IMemoryCacheManager<string, MethodInfo> _handlerCache;
         private readonly AuthenticationStateProvider _authenticationStateProvider;
-        private readonly Dictionary<Guid, List<Func<Guid, Task>>> _creationCallbacks;
-        private readonly Dictionary<string, Dictionary<string, Type>> _proxyReturnTypes;
-        private readonly Dictionary<Guid, Dictionary<string, object>> _proxyEventCallbacks;
-        private readonly Dictionary<string, Dictionary<string, object>> _proxySuccessCallbacks;
-        private readonly Dictionary<string, Dictionary<string, Func<ErrorMessageModel, Task>>> _proxyErrorCallbacks;
+        private readonly ConcurrentDictionary<Guid, List<Func<Guid, Task>>> _creationCallbacks;
+        private readonly ConcurrentDictionary<string, Dictionary<string, Type>> _proxyReturnTypes;
+        private readonly ConcurrentDictionary<Guid, Dictionary<string, object>> _proxyEventCallbacks;
+        private readonly ConcurrentDictionary<string, Dictionary<string, object>> _proxySuccessCallbacks;
+        private readonly ConcurrentDictionary<string, Dictionary<string, Func<ErrorMessageModel, Task>>> _proxyErrorCallbacks;
         #endregion
         #region Initialization
         public WebWorkerManager(IJSRuntime jsRuntime,
@@ -53,11 +54,11 @@ namespace LinesOfCode.Web.Workers.Managers
         {
             //initialization
             this._webWorkerIds = new List<Guid>();
-            this._creationCallbacks = new Dictionary<Guid, List<Func<Guid, Task>>>();
-            this._proxyReturnTypes = new Dictionary<string, Dictionary<string, Type>>();
-            this._proxyEventCallbacks = new Dictionary<Guid, Dictionary<string, object>>();
-            this._proxySuccessCallbacks = new Dictionary<string, Dictionary<string, object>>();
-            this._proxyErrorCallbacks = new Dictionary<string, Dictionary<string, Func<ErrorMessageModel, Task>>>();
+            this._creationCallbacks = new ConcurrentDictionary<Guid, List<Func<Guid, Task>>>();
+            this._proxyReturnTypes = new ConcurrentDictionary<string, Dictionary<string, Type>>();
+            this._proxyEventCallbacks = new ConcurrentDictionary<Guid, Dictionary<string, object>>();
+            this._proxySuccessCallbacks = new ConcurrentDictionary<string, Dictionary<string, object>>();
+            this._proxyErrorCallbacks = new ConcurrentDictionary<string, Dictionary<string, Func<ErrorMessageModel, Task>>>();
 
             //ensure dependencies
             this._logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -185,7 +186,7 @@ namespace LinesOfCode.Web.Workers.Managers
 
             //return
             await module.InvokeVoidAsync(WebWorkerConstants.JavaScriptInterop.Functions.TerminateWebWorker, workerId);
-            this._creationCallbacks.Remove(workerId);
+            this._creationCallbacks.Remove(workerId, out _);
             this._webWorkerIds.Remove(workerId);
         }
 
@@ -693,7 +694,7 @@ namespace LinesOfCode.Web.Workers.Managers
             //initialization
             this._webWorkerIds.Add(workerId);
             List<Task> tasks = new List<Task>();
-            this._logger.LogDebug($"Created and web worker {workerId}.");
+            this._logger.LogInformation($"Created web worker {workerId}.");
 
             //check worker callbacks
             if (!this._creationCallbacks.ContainsKey(workerId))
@@ -709,7 +710,7 @@ namespace LinesOfCode.Web.Workers.Managers
                 throw error;
 
             //return
-            this._creationCallbacks.Remove(workerId);
+            this._creationCallbacks.Remove(workerId, out _);
         }
 
         /// <summary>
@@ -797,25 +798,33 @@ namespace LinesOfCode.Web.Workers.Managers
 
             //get b2c settings
             Guid appId = this._settingsService.GetSetting<Guid>(WebWorkerConstants.Security.Settings.AppId);
-            Guid tenantId = this._settingsService.GetSetting<Guid>(WebWorkerConstants.Security.Settings.TenantId);
-            string policy = this._settingsService.GetSetting<string>(WebWorkerConstants.Security.Settings.Policy);
-            string scope = this._settingsService.GetSetting<string>(WebWorkerConstants.Security.Settings.AccessScope);
-            string instance = this._settingsService.GetSetting<string>(WebWorkerConstants.Security.Settings.Instance);
+            Guid tenantId = this._settingsService.GetSetting<Guid>(WebWorkerConstants.Security.Settings.TenantId);            
             Guid currentUserId = Guid.Parse(state.User.GetClaimValueWithFallback(WebWorkerConstants.Security.Claims.OID, WebWorkerConstants.Security.Claims.ID));
 
-            //get token
-            string key = WebWorkerUtilities.BuildAzureB2CTokenSessionKey(currentUserId, policy, tenantId, instance, appId, scope);
-            AzureB2CTokenModel token = await this._sessionStorageService.GetItemAsync<AzureB2CTokenModel>(key);
+            //get session storage keys
+            IEnumerable<string> keys = await this._sessionStorageService.KeysAsync();
+            foreach (string key in keys)
+            {
+                //loosely check for the one with token metadata specific o this user, app, and tenant; MSAL can change it's format for token keys
+                if (key.Contains(WebWorkerConstants.Security.AccessToken, StringComparison.InvariantCultureIgnoreCase) 
+                && key.Contains(currentUserId.ToString(), StringComparison.InvariantCultureIgnoreCase)
+                && key.Contains(tenantId.ToString(), StringComparison.InvariantCultureIgnoreCase)
+                && key.Contains(appId.ToString(), StringComparison.InvariantCultureIgnoreCase))
+                {
+                    //check each candidate key
+                    AzureB2CTokenModel token = await this._sessionStorageService.GetItemAsync<AzureB2CTokenModel>(key);
+                    if (token != null)
+                    {
+                        //return
+                        this._logger.LogInformation($"Found Azure B2C token at {key}.");
+                        return token;
+                    }
+                }
+            }
 
-            //log
-            string message = $" Azure B2C token at {key}.";
-            if (token != null)
-                this._logger.LogInformation($"Found{message}");
-            else
-                this._logger.LogError($"Could not find{message}");
-
-            //return
-            return token;
+            //not found
+            this._logger.LogError($"Could not find Azure B2C token among {keys.ToSeparatedList()}.");
+            return null;
         }
         
         /// <summary>
@@ -922,7 +931,7 @@ namespace LinesOfCode.Web.Workers.Managers
         /// <summary>
         /// Extracts and invokes a proxy callback.
         /// </summary>
-        private T GetProxyCallback<T>(BaseMessageModel model, Dictionary<string, Dictionary<string, T>> callbacks, string callbackType)
+        private T GetProxyCallback<T>(BaseMessageModel model, ConcurrentDictionary<string, Dictionary<string, T>> callbacks, string callbackType)
         {
             //initialization
             if (model == null)
