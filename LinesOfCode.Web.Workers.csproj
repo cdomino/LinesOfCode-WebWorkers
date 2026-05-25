@@ -20,6 +20,12 @@
 		<Description>Remember when Blazor WASM was single threaded? Well you won't after installing this package! Use Blazor Web Workers to allow your UI to remain responsive while long running operations, well, blaze on background JavaScript threads.</Description>
 	</PropertyGroup>
 	<ItemGroup>
+	  <Compile Remove="Properties\**" />
+	  <Content Remove="Properties\**" />
+	  <EmbeddedResource Remove="Properties\**" />
+	  <None Remove="Properties\**" />
+	</ItemGroup>
+	<ItemGroup>
 		<SupportedPlatform Include="browser" />
 	</ItemGroup>
 	<ItemGroup>
@@ -37,8 +43,5 @@
 		<PackageReference Include="Microsoft.AspNetCore.Components.Authorization" Version="10.0.8" />
 		<PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.8" />
 		<PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.8" />
-	</ItemGroup>
-	<ItemGroup>
-	  <Folder Include="Properties\" />
 	</ItemGroup>
 </Project>
